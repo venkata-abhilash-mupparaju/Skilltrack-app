@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "SkillTrack - Personal Growth & Study Tracker",
   "short_name": "SkillTrack",
   "description": "Mobile-first study habit & DSA practice tracker with independent cloud push reminders.",
@@ -49,16 +50,16 @@
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Quick Add DSA",
-      "short_name": "DSA Practice",
-      "description": "Log a solved DSA problem",
+      "name": "DSA Practice Hub",
+      "short_name": "DSA Hub",
+      "description": "Quick add solved problems",
       "url": "/dsa",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Notification Settings",
-      "short_name": "Notifications",
-      "description": "Configure cloud push reminders",
+      "name": "Cloud Reminders",
+      "short_name": "Reminders",
+      "description": "Manage push notifications and quiet hours",
       "url": "/settings/notifications",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }

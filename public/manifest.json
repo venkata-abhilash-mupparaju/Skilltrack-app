@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "SkillTrack - Personal Growth & Study Tracker",
   "short_name": "SkillTrack",
   "description": "Mobile-first study habit & DSA practice tracker with independent cloud push reminders.",

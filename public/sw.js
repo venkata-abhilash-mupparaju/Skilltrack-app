@@ -16,10 +16,14 @@ const ASSETS_TO_CACHE = [
 // Install Event - Pre-cache core shell & offline page
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
-        console.warn('[SW] Pre-caching non-fatal warning:', err);
-      });
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const asset of ASSETS_TO_CACHE) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.warn('[SW] Could not pre-cache asset:', asset, err);
+        }
+      }
     }).then(() => self.skipWaiting())
   );
 });
