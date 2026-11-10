@@ -68,8 +68,14 @@ export default function SettingsPage() {
     setIsRunningTest(true);
     setTestResult('Testing duplicate prevention: firing two rapid scheduler runs...');
     try {
-      const res1 = await fetch('/api/cron/reminders', { method: 'POST' });
-      const res2 = await fetch('/api/cron/reminders', { method: 'POST' });
+      const res1 = await fetch('/api/cron/reminders?simulate=true', {
+        method: 'POST',
+        headers: { 'x-simulation': 'true' },
+      });
+      const res2 = await fetch('/api/cron/reminders?simulate=true', {
+        method: 'POST',
+        headers: { 'x-simulation': 'true' },
+      });
       const data2 = await res2.json();
 
       setTestResult(

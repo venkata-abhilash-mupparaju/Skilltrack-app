@@ -128,9 +128,13 @@ export function NotificationSettingsView({
     setStatusMessage(null);
 
     try {
-      const res = await fetch('/api/cron/reminders', {
+      const res = await fetch('/api/cron/reminders?simulate=true', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-simulation': 'true',
+        },
+        body: JSON.stringify({ isSimulation: true, userId: user?.id }),
       });
 
       const data = await res.json();
@@ -206,14 +210,31 @@ export function NotificationSettingsView({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleEnablePush}
-              disabled={isSubscribing}
-              className="px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 active:bg-primary-700 disabled:opacity-50 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-primary-600/30 transition-all"
-            >
-              <Smartphone className="w-4 h-4" />
-              <span>{isSubscribing ? 'Subscribing Device...' : 'Enable This Device'}</span>
-            </button>
+            {devices.length > 0 ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold text-xs flex items-center gap-1.5 shadow-sm">
+                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span>Device Enabled & Active</span>
+                </div>
+                <button
+                  onClick={handleEnablePush}
+                  disabled={isSubscribing}
+                  className="px-2.5 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 border border-surface-700 text-surface-200 hover:text-white text-[11px] font-medium transition-colors"
+                  title="Re-sync push subscription if needed"
+                >
+                  {isSubscribing ? 'Syncing...' : 'Re-sync'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleEnablePush}
+                disabled={isSubscribing}
+                className="px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 active:bg-primary-700 disabled:opacity-50 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-primary-600/30 transition-all"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>{isSubscribing ? 'Enabling Device...' : 'Enable This Device'}</span>
+              </button>
+            )}
           </div>
         </div>
 

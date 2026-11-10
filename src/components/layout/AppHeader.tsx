@@ -51,7 +51,7 @@ export function AppHeader({
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-base tracking-tight text-white">SkillTrack</span>
               <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                v1.2.0
+                v1.2.1
               </span>
             </div>
             <p className="text-[10px] text-surface-200/70 hidden sm:block">Cloud-Synced Mobile Study Tracker</p>
