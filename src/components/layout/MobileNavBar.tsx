@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Calendar, Code2, Bell, Settings } from 'lucide-react';
+import { LayoutDashboard, Calendar, Code2, Bell, User } from 'lucide-react';
 
 export function MobileNavBar() {
   const pathname = usePathname();
@@ -33,10 +33,10 @@ export function MobileNavBar() {
       active: pathname.startsWith('/settings/notifications'),
     },
     {
-      label: 'Settings',
-      href: '/settings',
-      icon: Settings,
-      active: pathname === '/settings',
+      label: 'Profile',
+      href: '/profile',
+      icon: User,
+      active: pathname === '/profile',
     },
   ];
 

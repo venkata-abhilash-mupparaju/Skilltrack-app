@@ -1,15 +1,20 @@
 export interface Profile {
   id: string;
   email: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
+  full_name: string;
+  avatar_url?: string | null;
+  bio?: string;
+  target_hours_per_week?: number;
   timezone: string;
   current_streak: number;
   longest_streak: number;
   total_sessions_completed: number;
+  isGuest: boolean;
   created_at?: string;
   updated_at?: string;
 }
+
+export type UserProfile = Profile;
 
 export type SessionCategory = 'DSA' | 'Web Dev' | 'Core CS' | 'Aptitude' | 'Revision' | 'Other';
 

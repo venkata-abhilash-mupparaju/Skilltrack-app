@@ -19,7 +19,15 @@ import { QuickAddDsaModal } from '@/components/dashboard/QuickAddDsaModal';
 import { DsaDifficulty } from '@/types';
 
 export default function DsaPage() {
-  const { dsaProblems, syncStatus, addDsaProblem, deleteDsaProblem } = useSkillTrackStore();
+  const {
+    user,
+    profile,
+    dynamicStreak,
+    dsaProblems,
+    syncStatus,
+    addDsaProblem,
+    deleteDsaProblem,
+  } = useSkillTrackStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<'All' | DsaDifficulty>('All');
@@ -35,7 +43,13 @@ export default function DsaPage() {
 
   return (
     <div className="space-y-6">
-      <AppHeader currentStreak={5} syncStatus={syncStatus} />
+      <AppHeader
+        currentStreak={dynamicStreak}
+        syncStatus={syncStatus}
+        user={user}
+        profile={profile}
+        onOpenAddTask={() => setIsModalOpen(true)}
+      />
 
       <div className="flex items-center justify-between">
         <div>

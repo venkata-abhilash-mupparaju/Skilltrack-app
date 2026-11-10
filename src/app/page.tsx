@@ -12,6 +12,9 @@ import { Bell, Sparkles, Smartphone, ShieldCheck, ArrowRight } from 'lucide-reac
 
 export default function DashboardPage() {
   const {
+    user,
+    profile,
+    dynamicStreak,
     sessions,
     dsaProblems,
     sessionLogs,
@@ -28,8 +31,13 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <AppHeader currentStreak={5} syncStatus={syncStatus} />
+      {/* Header with dynamic user profile & streak */}
+      <AppHeader
+        currentStreak={dynamicStreak}
+        syncStatus={syncStatus}
+        user={user}
+        profile={profile}
+      />
 
       {/* Hero Welcome & Cloud Guarantee Banner */}
       <div className="bg-gradient-to-r from-primary-900/60 via-surface-900 to-surface-900 border border-primary-500/20 rounded-2xl p-4 sm:p-6 shadow-xl relative overflow-hidden">
@@ -74,7 +82,7 @@ export default function DashboardPage() {
         completedCount={completedTodayCount}
         totalToday={todaySessions.length}
         dsaProblems={dsaProblems}
-        currentStreak={5}
+        currentStreak={dynamicStreak}
         onOpenQuickDsa={() => setIsQuickDsaOpen(true)}
       />
 

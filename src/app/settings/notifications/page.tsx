@@ -8,6 +8,9 @@ import { ChevronLeft, Bell } from 'lucide-react';
 
 export default function NotificationSettingsPage() {
   const {
+    user,
+    profile,
+    dynamicStreak,
     settings,
     devices,
     syncStatus,
@@ -18,7 +21,12 @@ export default function NotificationSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <AppHeader currentStreak={5} syncStatus={syncStatus} />
+      <AppHeader
+        currentStreak={dynamicStreak}
+        syncStatus={syncStatus}
+        user={user}
+        profile={profile}
+      />
 
       <div className="flex items-center gap-2 text-xs text-surface-200">
         <Link href="/" className="hover:text-white flex items-center gap-1">

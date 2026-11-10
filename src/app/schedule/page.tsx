@@ -19,8 +19,17 @@ import { StudySession } from '@/types';
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function SchedulePage() {
-  const { sessions, settings, syncStatus, addSession, deleteSession, updateSession } =
-    useSkillTrackStore();
+  const {
+    user,
+    profile,
+    dynamicStreak,
+    sessions,
+    settings,
+    syncStatus,
+    addSession,
+    deleteSession,
+    updateSession,
+  } = useSkillTrackStore();
 
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay());
   const [showAddModal, setShowAddModal] = useState(false);
@@ -59,7 +68,13 @@ export default function SchedulePage() {
 
   return (
     <div className="space-y-6">
-      <AppHeader currentStreak={5} syncStatus={syncStatus} />
+      <AppHeader
+        currentStreak={dynamicStreak}
+        syncStatus={syncStatus}
+        user={user}
+        profile={profile}
+        onOpenAddTask={() => setShowAddModal(true)}
+      />
 
       <div className="flex items-center justify-between">
         <div>

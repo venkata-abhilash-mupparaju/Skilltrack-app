@@ -2,17 +2,42 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Zap, Bell, Flame, Cloud, HardDrive, Wifi, Smartphone } from 'lucide-react';
+import {
+  Zap,
+  Bell,
+  Flame,
+  Cloud,
+  HardDrive,
+  Wifi,
+  Smartphone,
+  User,
+  Plus,
+  CheckCircle,
+} from 'lucide-react';
 import { useInstallPrompt } from '@/lib/pwa/useInstallPrompt';
+import { UserProfile } from '@/types';
 
 interface AppHeaderProps {
   currentStreak?: number;
   syncStatus?: 'synced' | 'local' | 'syncing';
+  user?: { id: string; email: string | null; isGuest: boolean } | null;
+  profile?: UserProfile | null;
+  onOpenAddTask?: () => void;
 }
 
-export function AppHeader({ currentStreak = 5, syncStatus = 'synced' }: AppHeaderProps) {
+export function AppHeader({
+  currentStreak = 0,
+  syncStatus = 'synced',
+  user,
+  profile,
+  onOpenAddTask,
+}: AppHeaderProps) {
   const pathname = usePathname();
   const { isInstallable, promptInstall } = useInstallPrompt();
+
+  const displayName =
+    profile?.full_name ||
+    (user?.email ? user.email.split('@')[0] : 'Study Scholar');
 
   return (
     <header className="sticky top-0 z-30 bg-surface-950/80 backdrop-blur-md border-b border-surface-800/80 transition-colors">
@@ -76,11 +101,34 @@ export function AppHeader({ currentStreak = 5, syncStatus = 'synced' }: AppHeade
             <Bell className="w-3.5 h-3.5" />
             <span>Cloud Reminders</span>
           </Link>
+          <Link
+            href="/profile"
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+              pathname.startsWith('/profile')
+                ? 'bg-primary-600 text-white shadow-sm'
+                : 'text-surface-200 hover:text-white hover:bg-surface-800/60'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Profile</span>
+          </Link>
         </nav>
 
         {/* Header Right Status Badges */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Streak Counter */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Quick Add Task Button */}
+          {onOpenAddTask && (
+            <button
+              onClick={onOpenAddTask}
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-primary-600/20 hover:bg-primary-600/30 border border-primary-500/30 text-primary-300 text-xs font-semibold transition-all shadow-sm"
+              title="Add a new task or study block"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Task</span>
+            </button>
+          )}
+
+          {/* Dynamic Streak Counter */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold">
             <Flame className="w-3.5 h-3.5 fill-amber-400 animate-pulse" />
             <span>{currentStreak}d Streak</span>
@@ -88,13 +136,7 @@ export function AppHeader({ currentStreak = 5, syncStatus = 'synced' }: AppHeade
 
           {/* Sync Status Indicator */}
           <div
-            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium ${
-              syncStatus === 'synced'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : syncStatus === 'syncing'
-                ? 'bg-primary-500/10 border-primary-500/30 text-primary-400'
-                : 'bg-surface-800 border-surface-700 text-surface-200'
-            }`}
+            className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-medium bg-surface-800 border-surface-700 text-surface-200"
             title={
               syncStatus === 'synced'
                 ? 'Connected to Supabase Cloud'
@@ -104,17 +146,17 @@ export function AppHeader({ currentStreak = 5, syncStatus = 'synced' }: AppHeade
             {syncStatus === 'synced' ? (
               <>
                 <Cloud className="w-3 h-3 text-emerald-400" />
-                <span>Supabase Live</span>
+                <span className="hidden lg:inline">Supabase Live</span>
               </>
             ) : syncStatus === 'syncing' ? (
               <>
                 <Wifi className="w-3 h-3 text-primary-400 animate-spin" />
-                <span>Syncing...</span>
+                <span className="hidden lg:inline">Syncing...</span>
               </>
             ) : (
               <>
                 <HardDrive className="w-3 h-3 text-surface-200" />
-                <span>Local Cache</span>
+                <span className="hidden lg:inline">Local Cache</span>
               </>
             )}
           </div>
@@ -131,18 +173,41 @@ export function AppHeader({ currentStreak = 5, syncStatus = 'synced' }: AppHeade
           )}
 
           {/* English Language Pill */}
-          <div className="hidden xs:flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-900 border border-surface-700 text-[10px] text-surface-200" title="Application is locked in English">
+          <div
+            className="hidden xs:flex items-center gap-1 px-2 py-1 rounded-full bg-surface-900 border border-surface-700 text-[10px] text-surface-200"
+            title="Application language is locked in English"
+          >
             <span>🇺🇸</span>
             <span className="font-semibold text-white">EN</span>
           </div>
 
-          {/* User Sign In / Account Link */}
-          <Link
-            href="/login"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-800 hover:bg-surface-700 border border-surface-700 text-xs font-semibold text-white transition-colors"
-          >
-            <span>Log In</span>
-          </Link>
+          {/* User Profile Pill */}
+          {user ? (
+            <Link
+              href="/profile"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+                pathname === '/profile'
+                  ? 'bg-primary-600 text-white border-primary-500 shadow-md shadow-primary-600/25'
+                  : 'bg-surface-800/80 hover:bg-surface-700 border-surface-700 text-white'
+              }`}
+              title="View and update your profile & tasks"
+            >
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-primary-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold uppercase shadow-sm">
+                {displayName.charAt(0)}
+              </div>
+              <span className="text-xs font-semibold max-w-[90px] truncate hidden sm:inline">
+                {displayName}
+              </span>
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold shadow-md transition-colors"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Log In</span>
+            </Link>
+          )}
 
           {/* Notification Quick Link */}
           <Link

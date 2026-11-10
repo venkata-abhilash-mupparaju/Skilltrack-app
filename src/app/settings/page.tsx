@@ -22,6 +22,9 @@ import {
 
 export default function SettingsPage() {
   const {
+    user,
+    profile,
+    dynamicStreak,
     settings,
     devices,
     syncStatus,
@@ -83,7 +86,12 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <AppHeader currentStreak={5} syncStatus={syncStatus} />
+      <AppHeader
+        currentStreak={dynamicStreak}
+        syncStatus={syncStatus}
+        user={user}
+        profile={profile}
+      />
 
       <div>
         <h1 className="text-xl sm:text-2xl font-extrabold text-white flex items-center gap-2">

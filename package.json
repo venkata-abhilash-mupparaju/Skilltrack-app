@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/prep-build.js && next dev",
+    "build": "node scripts/prep-build.js && next build",
     "start": "next start",
     "lint": "next lint",
     "test-all": "node scripts/test-runner.js && node scripts/test-cron-logic.js"

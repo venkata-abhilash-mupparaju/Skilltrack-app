@@ -9,6 +9,7 @@ import {
   UserNotificationSettings,
   PushSubscriptionItem,
   NotificationLog,
+  UserProfile,
 } from '@/types';
 import { supabase, isSupabaseClientConfigured } from './supabase/client';
 
@@ -110,11 +111,26 @@ const DEFAULT_SETTINGS: UserNotificationSettings = {
   },
 };
 
+const DEFAULT_PROFILE: UserProfile = {
+  id: 'guest-user',
+  email: 'learner@skilltrack.app',
+  full_name: 'Study Scholar',
+  avatar_url: '',
+  bio: 'Software engineer focusing on DSA & System Design',
+  target_hours_per_week: 14,
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+  current_streak: 0,
+  longest_streak: 0,
+  total_sessions_completed: 0,
+  isGuest: false,
+};
+
 export function useSkillTrackStore() {
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [user, setUser] = useState<{ id: string; email: string | null; isGuest: boolean } | null>({
     id: 'guest-user',
-    email: 'guest@skilltrack.app',
-    isGuest: true,
+    email: 'learner@skilltrack.app',
+    isGuest: false,
   });
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [dsaProblems, setDsaProblems] = useState<DsaProblem[]>([]);
@@ -131,6 +147,10 @@ export function useSkillTrackStore() {
       const storedUser = localStorage.getItem('skilltrack_user');
       if (storedUser) {
         setUser(JSON.parse(storedUser));
+      }
+      const storedProfile = localStorage.getItem('skilltrack_profile');
+      if (storedProfile) {
+        setProfile(JSON.parse(storedProfile));
       }
       const storedSessions = localStorage.getItem('skilltrack_sessions');
       const storedProblems = localStorage.getItem('skilltrack_dsa');
@@ -191,10 +211,11 @@ export function useSkillTrackStore() {
       localStorage.setItem('skilltrack_dsa', JSON.stringify(dsaProblems));
       localStorage.setItem('skilltrack_logs', JSON.stringify(sessionLogs));
       localStorage.setItem('skilltrack_settings', JSON.stringify(settings));
+      localStorage.setItem('skilltrack_profile', JSON.stringify(profile));
     } catch (e) {
       console.warn('Failed to save to local storage:', e);
     }
-  }, [sessions, dsaProblems, sessionLogs, settings, isLoaded]);
+  }, [sessions, dsaProblems, sessionLogs, settings, profile, isLoaded]);
 
   // Actions
   const addSession = useCallback((newSession: Omit<StudySession, 'id' | 'user_id'>) => {
@@ -339,6 +360,12 @@ export function useSkillTrackStore() {
       if (data.user) {
         const authedUser = { id: data.user.id, email: data.user.email ?? email, isGuest: false };
         setUser(authedUser);
+        setProfile((prev) => ({
+          ...prev,
+          id: authedUser.id,
+          email: authedUser.email,
+          full_name: prev.full_name || authedUser.email.split('@')[0],
+        }));
         localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
         return authedUser;
       }
@@ -346,6 +373,12 @@ export function useSkillTrackStore() {
     // Local fallback login
     const localUser = { id: `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`, email, isGuest: false };
     setUser(localUser);
+    setProfile((prev) => ({
+      ...prev,
+      id: localUser.id,
+      email: localUser.email,
+      full_name: prev.full_name || email.split('@')[0],
+    }));
     localStorage.setItem('skilltrack_user', JSON.stringify(localUser));
     return localUser;
   }, []);
@@ -367,9 +400,26 @@ export function useSkillTrackStore() {
     return localUser;
   }, []);
 
+  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
+    setProfile((prev) => {
+      const merged = { ...prev, ...updates };
+      if (supabase && prev.id && prev.id !== 'guest-user') {
+        supabase.from('profiles').update(updates).eq('id', prev.id).then();
+      }
+      return merged;
+    });
+  }, []);
+
   const signInAsGuest = useCallback(() => {
-    const guestUser = { id: 'guest-user', email: 'guest@skilltrack.app', isGuest: true };
+    const guestUser = { id: 'guest-user', email: 'guest@skilltrack.app', isGuest: false };
     setUser(guestUser);
+    setProfile((prev) => ({
+      ...prev,
+      id: 'guest-user',
+      full_name: prev.full_name || 'Study Scholar',
+      email: 'guest@skilltrack.app',
+      isGuest: false,
+    }));
     localStorage.setItem('skilltrack_user', JSON.stringify(guestUser));
     return guestUser;
   }, []);
@@ -378,13 +428,62 @@ export function useSkillTrackStore() {
     if (isSupabaseClientConfigured && supabase) {
       await supabase.auth.signOut().catch(() => {});
     }
-    const guestUser = { id: 'guest-user', email: 'guest@skilltrack.app', isGuest: true };
-    setUser(guestUser);
+    setUser(null);
     localStorage.removeItem('skilltrack_user');
   }, []);
 
+  // Dynamically calculate actual consecutive days streak from completed logs
+  const dynamicStreak = (() => {
+    const completedDates = new Set(
+      sessionLogs.filter((l) => l.status === 'completed').map((l) => l.date)
+    );
+
+    if (completedDates.size === 0) {
+      return profile.current_streak || 0;
+    }
+
+    const formatYmd = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    const now = new Date();
+    const todayStr = formatYmd(now);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = formatYmd(yesterday);
+
+    let streak = 0;
+    let checkDate = new Date(now);
+
+    if (!completedDates.has(todayStr)) {
+      if (completedDates.has(yesterdayStr)) {
+        checkDate = yesterday;
+      } else {
+        return profile.current_streak || 0;
+      }
+    }
+
+    while (true) {
+      const dateKey = formatYmd(checkDate);
+      if (completedDates.has(dateKey)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return Math.max(streak, profile.current_streak || 0);
+  })();
+
   return {
     user,
+    profile,
+    updateProfile,
+    dynamicStreak,
     sessions,
     dsaProblems,
     sessionLogs,
