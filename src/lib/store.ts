@@ -36,6 +36,22 @@ const DEFAULT_SETTINGS: UserNotificationSettings = {
   },
 };
 
+// Strict Email Regex Validation (RFC 5322 compliant)
+export function isValidEmail(email: string): boolean {
+  return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email.trim());
+}
+
+export interface StoredLocalAccount {
+  id: string;
+  email: string;
+  password: string;
+  profile: UserProfile;
+  sessions: StudySession[];
+  dsaProblems: DsaProblem[];
+  sessionLogs: SessionLog[];
+  settings?: UserNotificationSettings;
+}
+
 export function useSkillTrackStore() {
   // Strictly null until user creates an account or signs in
   const [user, setUser] = useState<{ id: string; email: string | null } | null>(null);
@@ -148,34 +164,63 @@ export function useSkillTrackStore() {
       if (profile) {
         localStorage.setItem('skilltrack_profile', JSON.stringify(profile));
       }
+
+      // Also persist to local accounts registry if in local mode
+      if (!isSupabaseClientConfigured && user.email) {
+        const normalized = user.email.trim().toLowerCase();
+        const rawAccounts = localStorage.getItem('skilltrack_accounts');
+        const accounts: Record<string, StoredLocalAccount> = rawAccounts ? JSON.parse(rawAccounts) : {};
+        if (accounts[normalized] && profile) {
+          accounts[normalized].profile = profile;
+          accounts[normalized].sessions = sessions;
+          accounts[normalized].dsaProblems = dsaProblems;
+          accounts[normalized].sessionLogs = sessionLogs;
+          accounts[normalized].settings = settings;
+          localStorage.setItem('skilltrack_accounts', JSON.stringify(accounts));
+        }
+      }
     } catch (e) {
       console.warn('Failed to save to local storage:', e);
     }
   }, [sessions, dsaProblems, sessionLogs, settings, profile, user, isLoaded]);
 
-  // Account Creation: Only now is the profile database updated
+  // Account Creation: Strict validation and database/registry updates
   const signUpWithEmail = useCallback(
     async (fullName: string, email: string, pass: string) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      const trimmedName = fullName.trim();
+
+      // Strict validation checks
+      if (!isValidEmail(normalizedEmail)) {
+        throw new Error('Please enter a valid email address (e.g., student@university.edu or user@gmail.com).');
+      }
+      if (!pass || pass.length < 6) {
+        throw new Error('Password must be at least 6 characters long.');
+      }
+      if (!trimmedName) {
+        throw new Error('Please enter your full name.');
+      }
+
       let authedUser: { id: string; email: string | null };
       let newProfile: UserProfile;
 
       if (isSupabaseClientConfigured && supabase) {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: normalizedEmail,
           password: pass,
           options: {
-            data: { full_name: fullName },
+            data: { full_name: trimmedName },
           },
         });
 
-        if (error) throw error;
+        if (error) throw new Error(error.message);
         if (!data.user) throw new Error('Account registration failed.');
 
-        authedUser = { id: data.user.id, email: data.user.email ?? email };
+        authedUser = { id: data.user.id, email: data.user.email ?? normalizedEmail };
         newProfile = {
           id: data.user.id,
-          email: data.user.email ?? email,
-          full_name: fullName,
+          email: data.user.email ?? normalizedEmail,
+          full_name: trimmedName,
           bio: '',
           target_hours_per_week: 10,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
@@ -188,13 +233,20 @@ export function useSkillTrackStore() {
         // Insert actual user profile into database
         await supabase.from('profiles').upsert(newProfile);
       } else {
-        // Local account creation
+        // Local mode with strict accounts registry
+        const rawAccounts = localStorage.getItem('skilltrack_accounts');
+        const accounts: Record<string, StoredLocalAccount> = rawAccounts ? JSON.parse(rawAccounts) : {};
+
+        if (accounts[normalizedEmail]) {
+          throw new Error(`An account with the email "${normalizedEmail}" is already registered. Please sign in instead.`);
+        }
+
         const localId = `user_${Date.now()}`;
-        authedUser = { id: localId, email };
+        authedUser = { id: localId, email: normalizedEmail };
         newProfile = {
           id: localId,
-          email,
-          full_name: fullName,
+          email: normalizedEmail,
+          full_name: trimmedName,
           bio: '',
           target_hours_per_week: 10,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
@@ -203,6 +255,19 @@ export function useSkillTrackStore() {
           total_sessions_completed: 0,
           isGuest: false,
         };
+
+        accounts[normalizedEmail] = {
+          id: localId,
+          email: normalizedEmail,
+          password: pass,
+          profile: newProfile,
+          sessions: [],
+          dsaProblems: [],
+          sessionLogs: [],
+          settings: DEFAULT_SETTINGS,
+        };
+
+        localStorage.setItem('skilltrack_accounts', JSON.stringify(accounts));
       }
 
       setUser(authedUser);
@@ -222,21 +287,33 @@ export function useSkillTrackStore() {
     []
   );
 
-  // Sign In
+  // Sign In: Strict email format, account existence, and password validation
   const signInWithEmail = useCallback(async (email: string, pass: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Strict validation
+    if (!isValidEmail(normalizedEmail)) {
+      throw new Error('Please enter a valid email address (e.g., student@university.edu or user@gmail.com).');
+    }
+    if (!pass) {
+      throw new Error('Please enter your password.');
+    }
+
     let authedUser: { id: string; email: string | null };
     let loadedProfile: UserProfile;
 
     if (isSupabaseClientConfigured && supabase) {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: normalizedEmail,
         password: pass,
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || 'Invalid email or password.');
+      }
       if (!data.user) throw new Error('Sign in failed.');
 
-      authedUser = { id: data.user.id, email: data.user.email ?? email };
+      authedUser = { id: data.user.id, email: data.user.email ?? normalizedEmail };
 
       const { data: profData } = await supabase
         .from('profiles')
@@ -246,8 +323,8 @@ export function useSkillTrackStore() {
 
       loadedProfile = profData || {
         id: data.user.id,
-        email: data.user.email ?? email,
-        full_name: email.split('@')[0],
+        email: data.user.email ?? normalizedEmail,
+        full_name: normalizedEmail.split('@')[0],
         timezone: 'Asia/Kolkata',
         current_streak: 0,
         longest_streak: 0,
@@ -273,22 +350,35 @@ export function useSkillTrackStore() {
       setDsaProblems(userProblems || []);
       setSessionLogs(userLogs || []);
     } else {
-      // Local sign in
-      const localId = `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      authedUser = { id: localId, email };
-      loadedProfile = {
-        id: localId,
-        email,
-        full_name: email.split('@')[0],
+      // Local authentication verification against registered accounts
+      const rawAccounts = localStorage.getItem('skilltrack_accounts');
+      const accounts: Record<string, StoredLocalAccount> = rawAccounts ? JSON.parse(rawAccounts) : {};
+      const storedAccount = accounts[normalizedEmail];
+
+      if (!storedAccount) {
+        throw new Error(`No account found for "${normalizedEmail}". Please switch to "Create Account" to register first.`);
+      }
+
+      if (storedAccount.password !== pass) {
+        throw new Error('Incorrect password. Please verify your credentials and try again.');
+      }
+
+      authedUser = { id: storedAccount.id, email: storedAccount.email };
+      loadedProfile = storedAccount.profile || {
+        id: storedAccount.id,
+        email: storedAccount.email,
+        full_name: storedAccount.email.split('@')[0],
         timezone: 'Asia/Kolkata',
         current_streak: 0,
         longest_streak: 0,
         total_sessions_completed: 0,
         isGuest: false,
       };
-      setSessions([]);
-      setDsaProblems([]);
-      setSessionLogs([]);
+
+      setSessions(storedAccount.sessions || []);
+      setDsaProblems(storedAccount.dsaProblems || []);
+      setSessionLogs(storedAccount.sessionLogs || []);
+      if (storedAccount.settings) setSettings(storedAccount.settings);
     }
 
     setUser(authedUser);
