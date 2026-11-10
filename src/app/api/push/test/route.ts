@@ -31,21 +31,37 @@ export async function POST(req: NextRequest) {
     let subscriptions: any[] = [];
 
     if (supabase) {
-      const { data } = await supabase
-        .from('push_subscriptions')
-        .select('*')
-        .eq('user_id', userId);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+      if (isUuid) {
+        const { data } = await supabase
+          .from('push_subscriptions')
+          .select('*')
+          .eq('user_id', userId);
 
-      if (data && data.length > 0) {
-        subscriptions = data;
+        if (data && data.length > 0) {
+          subscriptions = data;
+        }
+      }
+
+      // If no devices found for this specific ID, check recent subscriptions
+      if (subscriptions.length === 0) {
+        const { data: allSubs } = await supabase
+          .from('push_subscriptions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (allSubs && allSubs.length > 0) {
+          subscriptions = allSubs;
+        }
       }
     }
 
     if (subscriptions.length === 0) {
       // Use in-memory cache
-      subscriptions = Array.from(localSubscriptionsCache.values()).filter(
-        (s) => s.user_id === userId
-      );
+      const cached = Array.from(localSubscriptionsCache.values());
+      const userCached = cached.filter((s) => s.user_id === userId);
+      subscriptions = userCached.length > 0 ? userCached : cached;
     }
 
     if (subscriptions.length === 0) {

@@ -16,11 +16,14 @@ if (vapidPublic && vapidPrivate) {
   }
 }
 
+import { extractIanaTimezone } from '@/lib/timezones';
+
 // Convert UTC Date to components in user timezone
 function getUserLocalTime(date: Date, timeZone: string) {
+  const cleanTz = extractIanaTimezone(timeZone);
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone,
+      timeZone: cleanTz,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -35,7 +38,7 @@ function getUserLocalTime(date: Date, timeZone: string) {
       map[p.type] = p.value;
     });
 
-    const dayName = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(date);
+    const dayName = new Intl.DateTimeFormat('en-US', { timeZone: cleanTz, weekday: 'short' }).format(date);
     const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
     const hours = parseInt(map.hour, 10);

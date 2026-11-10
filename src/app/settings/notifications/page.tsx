@@ -51,6 +51,7 @@ export default function NotificationSettingsPage() {
       </div>
 
       <NotificationSettingsView
+        user={user}
         settings={settings}
         devices={devices}
         onUpdateSettings={updateSettings}

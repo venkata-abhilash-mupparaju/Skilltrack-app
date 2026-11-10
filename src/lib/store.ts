@@ -13,6 +13,22 @@ import {
 } from '@/types';
 import { supabase, isSupabaseClientConfigured } from './supabase/client';
 
+export function isValidUUID(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
+
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const DEFAULT_SETTINGS: UserNotificationSettings = {
   user_id: '',
   enabled: true,
@@ -140,9 +156,49 @@ export function useSkillTrackStore() {
             client.from('push_subscriptions').select('*').eq('user_id', session.user.id),
           ])
             .then(([sessRes, dsaRes, logsRes, settRes, devRes]) => {
-              if (sessRes.data) setSessions(sessRes.data);
-              if (dsaRes.data) setDsaProblems(dsaRes.data);
-              if (logsRes.data) setSessionLogs(logsRes.data);
+              if (sessRes.data && sessRes.data.length > 0) {
+                setSessions(sessRes.data);
+              } else {
+                // If Supabase has 0 sessions, salvage any sessions saved in local storage
+                try {
+                  const storedSessions = localStorage.getItem('skilltrack_sessions');
+                  if (storedSessions) {
+                    const parsed = JSON.parse(storedSessions);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                      const migrated = parsed.map((s: any) => ({
+                        ...s,
+                        id: isValidUUID(s.id) ? s.id : generateUUID(),
+                        user_id: session.user.id,
+                        days_of_week: s.days_of_week || [0, 1, 2, 3, 4, 5, 6],
+                        is_active: s.is_active ?? true,
+                      }));
+                      setSessions(migrated);
+                      migrated.forEach((m: any) => {
+                        client.from('study_sessions').upsert({
+                          id: m.id,
+                          user_id: m.user_id,
+                          title: m.title,
+                          category: m.category || 'DSA',
+                          start_time: m.start_time,
+                          end_time: m.end_time,
+                          days_of_week: m.days_of_week,
+                          is_active: m.is_active,
+                          notes: m.notes || null,
+                        }).then();
+                      });
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Could not salvage local sessions:', e);
+                }
+              }
+
+              if (dsaRes.data && dsaRes.data.length > 0) {
+                setDsaProblems(dsaRes.data);
+              }
+              if (logsRes.data && logsRes.data.length > 0) {
+                setSessionLogs(logsRes.data);
+              }
               if (settRes.data) setSettings(settRes.data);
               if (devRes.data) setDevices(devRes.data);
               setSyncStatus('synced');
@@ -153,9 +209,9 @@ export function useSkillTrackStore() {
     }
   }, []);
 
-  // Save changes to localStorage only if user is logged in
+  // Save changes to localStorage whenever state changes
   useEffect(() => {
-    if (!isLoaded || !user) return;
+    if (!isLoaded) return;
     try {
       localStorage.setItem('skilltrack_sessions', JSON.stringify(sessions));
       localStorage.setItem('skilltrack_dsa', JSON.stringify(dsaProblems));
@@ -165,13 +221,13 @@ export function useSkillTrackStore() {
         localStorage.setItem('skilltrack_profile', JSON.stringify(profile));
       }
 
-      // Also persist to local accounts registry if in local mode
-      if (!isSupabaseClientConfigured && user.email) {
+      // Also persist to local accounts registry if user is logged in
+      if (user && user.email) {
         const normalized = user.email.trim().toLowerCase();
         const rawAccounts = localStorage.getItem('skilltrack_accounts');
         const accounts: Record<string, StoredLocalAccount> = rawAccounts ? JSON.parse(rawAccounts) : {};
-        if (accounts[normalized] && profile) {
-          accounts[normalized].profile = profile;
+        if (accounts[normalized]) {
+          if (profile) accounts[normalized].profile = profile;
           accounts[normalized].sessions = sessions;
           accounts[normalized].dsaProblems = dsaProblems;
           accounts[normalized].sessionLogs = sessionLogs;
@@ -241,7 +297,7 @@ export function useSkillTrackStore() {
           throw new Error(`An account with the email "${normalizedEmail}" is already registered. Please sign in instead.`);
         }
 
-        const localId = `user_${Date.now()}`;
+        const localId = generateUUID();
         authedUser = { id: localId, email: normalizedEmail };
         newProfile = {
           id: localId,
@@ -346,7 +402,41 @@ export function useSkillTrackStore() {
         .select('*')
         .eq('user_id', data.user.id);
 
-      setSessions(userSessions || []);
+      if (userSessions && userSessions.length > 0) {
+        setSessions(userSessions);
+      } else {
+        try {
+          const storedSessions = localStorage.getItem('skilltrack_sessions');
+          if (storedSessions) {
+            const parsed = JSON.parse(storedSessions);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const migrated = parsed.map((s: any) => ({
+                ...s,
+                id: isValidUUID(s.id) ? s.id : generateUUID(),
+                user_id: data.user.id,
+                days_of_week: s.days_of_week || [0, 1, 2, 3, 4, 5, 6],
+                is_active: s.is_active ?? true,
+              }));
+              setSessions(migrated);
+              migrated.forEach((m: any) => {
+                if (supabase) {
+                  supabase.from('study_sessions').upsert({
+                    id: m.id,
+                    user_id: m.user_id,
+                    title: m.title,
+                    category: m.category || 'DSA',
+                    start_time: m.start_time,
+                    end_time: m.end_time,
+                    days_of_week: m.days_of_week,
+                    is_active: m.is_active,
+                    notes: m.notes || null,
+                  }).then();
+                }
+              });
+            }
+          }
+        } catch {}
+      }
       setDsaProblems(userProblems || []);
       setSessionLogs(userLogs || []);
     } else {
@@ -426,16 +516,40 @@ export function useSkillTrackStore() {
   // Add Session / Task
   const addSession = useCallback(
     (newSession: Omit<StudySession, 'id' | 'user_id'>) => {
-      const currentUserId = user ? user.id : 'anonymous';
+      const sessionId = generateUUID();
+      const currentUserId = user?.id || generateUUID();
       const session: StudySession = {
         ...newSession,
-        id: `sess-${Date.now()}`,
+        id: sessionId,
         user_id: currentUserId,
+        days_of_week: newSession.days_of_week && newSession.days_of_week.length > 0 ? newSession.days_of_week : [0, 1, 2, 3, 4, 5, 6],
+        is_active: newSession.is_active ?? true,
       };
+
       setSessions((prev) => [...prev, session]);
 
-      if (supabase && user) {
-        supabase.from('study_sessions').insert(session).then();
+      if (supabase && user && isSupabaseClientConfigured) {
+        const dbPayload = {
+          id: session.id,
+          user_id: user.id,
+          title: session.title,
+          category: session.category || 'DSA',
+          start_time: session.start_time,
+          end_time: session.end_time,
+          days_of_week: session.days_of_week,
+          is_active: session.is_active,
+          notes: session.notes ?? null,
+        };
+        supabase
+          .from('study_sessions')
+          .insert(dbPayload)
+          .then(({ error }) => {
+            if (error) {
+              console.error('[Supabase] Failed to insert study session:', error);
+            } else {
+              console.log('[Supabase] Successfully inserted study session:', session.id);
+            }
+          });
       }
       return session;
     },
@@ -447,8 +561,15 @@ export function useSkillTrackStore() {
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
       );
-      if (supabase && user) {
-        supabase.from('study_sessions').update(updates).eq('id', id).then();
+      if (supabase && user && isSupabaseClientConfigured) {
+        const { id: _, user_id: __, is_today: ___, status_today: ____, ...cleanUpdates } = updates as any;
+        supabase
+          .from('study_sessions')
+          .update(cleanUpdates)
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[Supabase] Failed to update session:', error);
+          });
       }
     },
     [user]
@@ -457,8 +578,14 @@ export function useSkillTrackStore() {
   const deleteSession = useCallback(
     (id: string) => {
       setSessions((prev) => prev.filter((s) => s.id !== id));
-      if (supabase && user) {
-        supabase.from('study_sessions').delete().eq('id', id).then();
+      if (supabase && user && isSupabaseClientConfigured) {
+        supabase
+          .from('study_sessions')
+          .delete()
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[Supabase] Failed to delete session:', error);
+          });
       }
     },
     [user]
@@ -466,7 +593,7 @@ export function useSkillTrackStore() {
 
   const toggleSessionCompletion = useCallback(
     (sessionId: string, date: string = new Date().toISOString().split('T')[0]) => {
-      const currentUserId = user ? user.id : 'anonymous';
+      const currentUserId = user?.id || generateUUID();
       setSessionLogs((prev) => {
         const existing = prev.find((l) => l.session_id === sessionId && l.date === date);
         let updatedLogs: SessionLog[];
@@ -478,12 +605,19 @@ export function useSkillTrackStore() {
               ? { ...l, status: nextStatus, completed_at: new Date().toISOString() }
               : l
           );
-          if (supabase && user) {
-            supabase.from('session_logs').update({ status: nextStatus }).eq('id', existing.id).then();
+          if (supabase && user && isSupabaseClientConfigured) {
+            supabase
+              .from('session_logs')
+              .update({ status: nextStatus })
+              .eq('id', existing.id)
+              .then(({ error }) => {
+                if (error) console.error('[Supabase] Failed to update session log:', error);
+              });
           }
         } else {
+          const newLogId = generateUUID();
           const newLog: SessionLog = {
-            id: `log-${Date.now()}`,
+            id: newLogId,
             user_id: currentUserId,
             session_id: sessionId,
             date,
@@ -493,8 +627,22 @@ export function useSkillTrackStore() {
             completed_at: new Date().toISOString(),
           };
           updatedLogs = [...prev, newLog];
-          if (supabase && user) {
-            supabase.from('session_logs').insert(newLog).then();
+          if (supabase && user && isSupabaseClientConfigured) {
+            supabase
+              .from('session_logs')
+              .insert({
+                id: newLog.id,
+                user_id: user.id,
+                session_id: sessionId,
+                date: newLog.date,
+                status: newLog.status,
+                problems_solved: newLog.problems_solved,
+                duration_minutes: newLog.duration_minutes,
+                completed_at: newLog.completed_at,
+              })
+              .then(({ error }) => {
+                if (error) console.error('[Supabase] Failed to insert session log:', error);
+              });
           }
         }
         return updatedLogs;
@@ -505,18 +653,35 @@ export function useSkillTrackStore() {
 
   const addDsaProblem = useCallback(
     (problem: Omit<DsaProblem, 'id' | 'user_id' | 'solved_at'>) => {
-      const currentUserId = user ? user.id : 'anonymous';
+      const probId = generateUUID();
+      const currentUserId = user?.id || generateUUID();
       const today = new Date().toISOString().split('T')[0];
       const newProb: DsaProblem = {
         ...problem,
-        id: `prob-${Date.now()}`,
+        id: probId,
         user_id: currentUserId,
         solved_at: today,
       };
       setDsaProblems((prev) => [newProb, ...prev]);
 
-      if (supabase && user) {
-        supabase.from('dsa_problems').insert(newProb).then();
+      if (supabase && user && isSupabaseClientConfigured) {
+        supabase
+          .from('dsa_problems')
+          .insert({
+            id: newProb.id,
+            user_id: user.id,
+            title: newProb.title,
+            difficulty: newProb.difficulty,
+            platform: newProb.platform || 'LeetCode',
+            problem_url: newProb.problem_url ?? null,
+            tags: newProb.tags ?? [],
+            status: newProb.status ?? 'Solved',
+            notes: newProb.notes ?? null,
+            solved_at: newProb.solved_at,
+          })
+          .then(({ error }) => {
+            if (error) console.error('[Supabase] Failed to insert dsa problem:', error);
+          });
       }
       return newProb;
     },
@@ -526,8 +691,14 @@ export function useSkillTrackStore() {
   const deleteDsaProblem = useCallback(
     (id: string) => {
       setDsaProblems((prev) => prev.filter((p) => p.id !== id));
-      if (supabase && user) {
-        supabase.from('dsa_problems').delete().eq('id', id).then();
+      if (supabase && user && isSupabaseClientConfigured) {
+        supabase
+          .from('dsa_problems')
+          .delete()
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) console.error('[Supabase] Failed to delete dsa problem:', error);
+          });
       }
     },
     [user]
@@ -537,11 +708,13 @@ export function useSkillTrackStore() {
     (newSettings: Partial<UserNotificationSettings>) => {
       setSettings((prev) => {
         const merged = { ...prev, ...newSettings };
-        if (supabase && user) {
+        if (supabase && user && isSupabaseClientConfigured) {
           supabase
             .from('user_notification_settings')
             .upsert({ ...merged, user_id: user.id })
-            .then();
+            .then(({ error }) => {
+              if (error) console.error('[Supabase] Failed to update settings:', error);
+            });
         }
         return merged;
       });
@@ -550,26 +723,27 @@ export function useSkillTrackStore() {
   );
 
   const refreshDevices = useCallback(async () => {
-    if (!user) return;
+    const targetUserId = user?.id || (typeof window !== 'undefined' ? localStorage.getItem('skilltrack_user_id') : null) || 'guest-user';
     try {
-      const res = await fetch(`/api/push/subscribe?userId=${user.id}`);
+      const res = await fetch(`/api/push/subscribe?userId=${targetUserId}`);
       const data = await res.json();
       if (data.subscriptions) {
         setDevices(data.subscriptions);
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to refresh devices:', err);
+    }
   }, [user]);
 
   const removeDevice = useCallback(
     async (endpoint: string) => {
-      if (!user) return;
+      setDevices((prev) => prev.filter((d) => d.endpoint !== endpoint));
       try {
         await fetch('/api/push/unsubscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint, userId: user.id }),
+          body: JSON.stringify({ endpoint, userId: user?.id || 'guest-user' }),
         });
-        setDevices((prev) => prev.filter((d) => d.endpoint !== endpoint));
       } catch (e) {
         console.error('Failed to remove device:', e);
       }
@@ -627,9 +801,11 @@ export function useSkillTrackStore() {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayDayOfWeek = new Date().getDay();
 
-  const todaySessions = sessions.filter(
-    (s) => s.is_active && (s.days_of_week || []).includes(todayDayOfWeek)
-  );
+  const todaySessions = sessions.filter((s) => {
+    if (!s.is_active) return false;
+    const days = s.days_of_week && s.days_of_week.length > 0 ? s.days_of_week : [0, 1, 2, 3, 4, 5, 6];
+    return days.includes(todayDayOfWeek);
+  });
 
   const completedTodayCount = todaySessions.filter((s) => {
     const log = sessionLogs.find((l) => l.session_id === s.id && l.date === todayStr);

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { SessionCategory } from '@/types';
+import { INDIAN_CITIES, GLOBAL_TIMEZONES } from '@/lib/timezones';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -338,13 +339,27 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-surface-200 mb-1 font-medium">Timezone</label>
-                <input
-                  type="text"
+                <label className="block text-surface-200 mb-1 font-medium">Your City / Timezone</label>
+                <select
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-800 border border-surface-700 text-white font-mono text-xs focus:outline-none focus:border-primary-500"
-                />
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-800 border border-surface-700 text-white text-xs focus:outline-none focus:border-primary-500 font-medium"
+                >
+                  <optgroup label="🇮🇳 Indian Cities (IST - UTC+05:30)">
+                    {INDIAN_CITIES.map((city) => (
+                      <option key={city.value} value={city.value}>
+                        {city.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🌍 International Timezones">
+                    {GLOBAL_TIMEZONES.map((tz) => (
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
               </div>
             </div>
 

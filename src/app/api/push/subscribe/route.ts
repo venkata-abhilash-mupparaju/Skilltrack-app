@@ -35,21 +35,26 @@ export async function POST(req: NextRequest) {
     // Save to Supabase if configured
     const supabase = getServiceSupabase();
     if (supabase) {
-      const { error } = await supabase.from('push_subscriptions').upsert(
-        {
-          user_id: userId,
-          endpoint,
-          p256dh,
-          auth,
-          device_name: deviceName,
-          user_agent: userAgent,
-          last_used_at: new Date().toISOString(),
-        },
-        { onConflict: 'endpoint' }
-      );
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+      if (isUuid) {
+        const { error } = await supabase.from('push_subscriptions').upsert(
+          {
+            user_id: userId,
+            endpoint,
+            p256dh,
+            auth,
+            device_name: deviceName,
+            user_agent: userAgent,
+            last_used_at: new Date().toISOString(),
+          },
+          { onConflict: 'endpoint' }
+        );
 
-      if (error) {
-        console.error('[API /api/push/subscribe] Supabase error:', error);
+        if (error) {
+          console.error('[API /api/push/subscribe] Supabase error:', error);
+        }
+      } else {
+        console.warn('[API /api/push/subscribe] Skipping Supabase insert because userId is not a valid UUID:', userId);
       }
     }
 
@@ -67,22 +72,39 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId') || 'guest-user';
   const supabase = getServiceSupabase();
+  let subscriptions: any[] = [];
 
   if (supabase) {
-    const { data, error } = await supabase
-      .from('push_subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    if (isUuid) {
+      const { data, error } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      return NextResponse.json({ subscriptions: data });
+      if (!error && data && data.length > 0) {
+        subscriptions = data;
+      }
+    }
+
+    if (subscriptions.length === 0) {
+      const { data: allSubs } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (allSubs && allSubs.length > 0) {
+        subscriptions = allSubs;
+      }
     }
   }
 
   // Fallback to local cache
-  const cachedList = Array.from(localSubscriptionsCache.values()).filter(
-    (item) => item.user_id === userId
-  );
-  return NextResponse.json({ subscriptions: cachedList });
+  if (subscriptions.length === 0) {
+    const cachedList = Array.from(localSubscriptionsCache.values());
+    subscriptions = cachedList;
+  }
+
+  return NextResponse.json({ subscriptions });
 }

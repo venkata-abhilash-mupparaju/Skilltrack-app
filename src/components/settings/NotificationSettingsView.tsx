@@ -20,8 +20,10 @@ import {
   registerPushSubscription,
   isPushNotificationSupported,
 } from '@/lib/pwa/pushManager';
+import { INDIAN_CITIES, GLOBAL_TIMEZONES } from '@/lib/timezones';
 
 interface NotificationSettingsViewProps {
+  user?: { id: string; email: string | null } | null;
   settings: UserNotificationSettings;
   devices: PushSubscriptionItem[];
   onUpdateSettings: (newSettings: Partial<UserNotificationSettings>) => void;
@@ -30,6 +32,7 @@ interface NotificationSettingsViewProps {
 }
 
 export function NotificationSettingsView({
+  user,
   settings,
   devices,
   onUpdateSettings,
@@ -47,7 +50,8 @@ export function NotificationSettingsView({
     setIsSubscribing(true);
     setStatusMessage(null);
 
-    const res = await registerPushSubscription('guest-user');
+    const targetUserId = user?.id || 'guest-user';
+    const res = await registerPushSubscription(targetUserId);
     setIsSubscribing(false);
 
     if (res.success) {
@@ -70,17 +74,37 @@ export function NotificationSettingsView({
     setStatusMessage(null);
 
     try {
+      const targetUserId = user?.id || 'guest-user';
+
+      // 1. Send test push via server Web Push
       const res = await fetch('/api/push/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'guest-user',
+          userId: targetUserId,
           customTitle: '🎯 SkillTrack Mobile Test Reminder',
           customBody: `Cloud push delivered successfully at ${new Date().toLocaleTimeString()}! Your phone is connected.`,
         }),
       });
 
       const data = await res.json();
+
+      // 2. Also trigger immediate local notification via Service Worker
+      if ('serviceWorker' in navigator && Notification.permission === 'granted') {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          reg.showNotification('🎯 SkillTrack Mobile Test Reminder', {
+            body: `Your phone is connected! Notifications are working at ${new Date().toLocaleTimeString()}.`,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/badge-72x72.png',
+            vibrate: [200, 100, 200],
+            tag: `test-instant-${Date.now()}`,
+          } as any);
+        } catch (localErr) {
+          console.warn('Local service worker test notification:', localErr);
+        }
+      }
+
       if (res.ok && data.success) {
         setStatusMessage({
           type: 'success',
@@ -89,7 +113,7 @@ export function NotificationSettingsView({
       } else {
         setStatusMessage({
           type: 'error',
-          text: data.error || 'Could not send test push. Ensure you have clicked "Enable Push Reminders" first.',
+          text: data.error || 'Could not send test push. Ensure you have clicked "Enable This Device" first.',
         });
       }
     } catch (err: any) {
@@ -229,14 +253,28 @@ export function NotificationSettingsView({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
           {/* Timezone */}
           <div className="bg-surface-800/60 p-4 rounded-xl border border-surface-700/60">
-            <label className="block text-surface-200 font-semibold mb-1">Your Timezone</label>
-            <p className="text-[11px] text-surface-200/70 mb-2">Used by cloud cron to compute exact local times</p>
-            <input
-              type="text"
-              value={settings.timezone}
+            <label className="block text-surface-200 font-semibold mb-1">Your City / Timezone</label>
+            <p className="text-[11px] text-surface-200/70 mb-2">Select your Indian city or local timezone for exact reminders</p>
+            <select
+              value={settings.timezone || 'Asia/Kolkata'}
               onChange={(e) => onUpdateSettings({ timezone: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-surface-700 text-white font-mono text-xs focus:outline-none focus:border-primary-500"
-            />
+              className="w-full px-3 py-2.5 rounded-lg bg-surface-900 border border-surface-700 text-white text-xs focus:outline-none focus:border-primary-500 font-medium"
+            >
+              <optgroup label="🇮🇳 Indian Cities (IST - UTC+05:30)">
+                {INDIAN_CITIES.map((city) => (
+                  <option key={city.value} value={city.value}>
+                    {city.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="🌍 International Timezones">
+                {GLOBAL_TIMEZONES.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
           </div>
 
           {/* Reminder Before Session */}

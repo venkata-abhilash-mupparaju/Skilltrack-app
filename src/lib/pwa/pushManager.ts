@@ -78,6 +78,16 @@ export async function registerPushSubscription(userId: string = 'guest-user'): P
   subscription?: PushSubscription;
   error?: string;
 }> {
+  if (userId === 'guest-user' && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('skilltrack_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u && u.id) userId = u.id;
+      }
+    } catch {}
+  }
+
   const check = isPushNotificationSupported();
   if (!check.supported) {
     return { success: false, error: check.reason || 'Push notifications not supported' };
@@ -135,6 +145,15 @@ export async function registerPushSubscription(userId: string = 'guest-user'): P
 }
 
 export async function unregisterPushSubscription(endpoint?: string, userId: string = 'guest-user'): Promise<boolean> {
+  if (userId === 'guest-user' && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('skilltrack_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u && u.id) userId = u.id;
+      }
+    } catch {}
+  }
   try {
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.ready;
