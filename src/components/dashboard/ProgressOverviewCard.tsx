@@ -15,7 +15,7 @@ export function ProgressOverviewCard({
   completedCount,
   totalToday,
   dsaProblems,
-  currentStreak = 5,
+  currentStreak = 0,
   onOpenQuickDsa,
 }: ProgressOverviewCardProps) {
   const percentage = totalToday > 0 ? Math.round((completedCount / totalToday) * 100) : 0;
@@ -78,7 +78,9 @@ export function ProgressOverviewCard({
               <span className="text-surface-200 text-sm font-normal">Days In A Row</span>
             </div>
             <p className="text-xs text-surface-200/70 mt-1">
-              Top 5% consistency. Cloud alerts keep your streak alive!
+              {currentStreak > 0
+                ? 'Consecutive daily study completed. Keep your streak alive!'
+                : 'Complete your scheduled sessions to start your consistency streak!'}
             </p>
           </div>
 

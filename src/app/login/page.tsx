@@ -7,20 +7,21 @@ import {
   Zap,
   Mail,
   Lock,
+  User,
   ArrowRight,
-  UserCheck,
   CheckCircle,
   AlertCircle,
   Globe,
-  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signInWithEmail, signUpWithEmail, signInAsGuest } = useSkillTrackStore();
+  const { signInWithEmail, signUpWithEmail } = useSkillTrackStore();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,24 +37,23 @@ export default function LoginPage() {
     try {
       if (mode === 'signin') {
         await signInWithEmail(email.trim(), password);
-        setSuccessMessage('Signed in successfully! Redirecting to your dashboard...');
-        setTimeout(() => router.push('/'), 600);
+        setSuccessMessage('Signed in successfully! Loading your profile...');
+        setTimeout(() => router.push('/profile'), 500);
       } else {
-        await signUpWithEmail(email.trim(), password);
-        setSuccessMessage('Account created successfully! Redirecting...');
-        setTimeout(() => router.push('/'), 600);
+        if (!fullName.trim()) {
+          setErrorMessage('Please enter your full name to create your account.');
+          setIsLoading(false);
+          return;
+        }
+        await signUpWithEmail(fullName.trim(), email.trim(), password);
+        setSuccessMessage('Account created and profile saved! Redirecting to your profile...');
+        setTimeout(() => router.push('/profile'), 500);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleGuestLogin = () => {
-    signInAsGuest();
-    setSuccessMessage('Entering SkillTrack as Guest...');
-    setTimeout(() => router.push('/'), 400);
   };
 
   return (
@@ -75,11 +75,23 @@ export default function LoginPage() {
             <Zap className="w-6 h-6 fill-white" />
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">
-            {mode === 'signin' ? 'Sign In to SkillTrack' : 'Create an Account'}
+            {mode === 'signin' ? 'Sign In to SkillTrack' : 'Create Your Account'}
           </h1>
           <p className="text-xs sm:text-sm text-surface-200/80 mt-1">
-            Personal Study & DSA Habit Tracker with Cloud Reminders
+            {mode === 'signin'
+              ? 'Access your saved schedule, habits, and cloud reminders'
+              : 'Create your personal account to set up your profile and tasks'}
           </p>
+        </div>
+
+        {/* Informative Notice: Zero Default Profiles */}
+        <div className="mb-5 p-3 rounded-xl bg-surface-800/60 border border-surface-700/60 text-surface-200/90 text-xs flex items-start gap-2.5">
+          <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-primary-400" />
+          <span>
+            {mode === 'signup'
+              ? 'Your profile is created in the database upon registration with your custom name and preferences.'
+              : 'Sign in to sync your personal study sessions and push notification settings across devices.'}
+          </span>
         </div>
 
         {/* Status Alerts in English */}
@@ -96,29 +108,6 @@ export default function LoginPage() {
             <span className="flex-1 font-medium">{successMessage}</span>
           </div>
         )}
-
-        {/* One-Click Instant Guest Access */}
-        <div className="mb-5">
-          <button
-            type="button"
-            onClick={handleGuestLogin}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-200" />
-            <span>Instant One-Click Login (Guest Mode)</span>
-          </button>
-          <p className="text-[11px] text-surface-200/60 text-center mt-1.5">
-            No password or registration required. Jump straight into the dashboard!
-          </p>
-        </div>
-
-        <div className="relative flex py-2 items-center mb-5">
-          <div className="flex-grow border-t border-surface-800"></div>
-          <span className="flex-shrink mx-3 text-[11px] uppercase font-semibold text-surface-200/60 tracking-wider">
-            Or sign in with email
-          </span>
-          <div className="flex-grow border-t border-surface-800"></div>
-        </div>
 
         {/* Form Mode Toggle */}
         <div className="grid grid-cols-2 gap-1 bg-surface-950/60 p-1 rounded-xl border border-surface-800 mb-5">
@@ -152,8 +141,25 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Email & Password Form */}
+        {/* Authentication Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs sm:text-sm">
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-surface-200 font-medium mb-1.5">Full Name</label>
+              <div className="relative">
+                <User className="w-4 h-4 text-surface-200 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Alex Mercer"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-surface-950/60 border border-surface-700 text-white placeholder-surface-200/40 text-xs sm:text-sm focus:outline-none focus:border-primary-500"
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-surface-200 font-medium mb-1.5">Email Address</label>
             <div className="relative">

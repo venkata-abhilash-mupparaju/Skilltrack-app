@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useSkillTrackStore } from '@/lib/store';
@@ -8,19 +8,17 @@ import {
   User,
   Flame,
   CheckCircle2,
-  Code2,
   Calendar,
   Clock,
   Plus,
   Trash2,
   Save,
   LogOut,
-  Bell,
-  Globe,
-  Target,
   Edit3,
   ChevronLeft,
   Sparkles,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import { SessionCategory } from '@/types';
@@ -45,11 +43,11 @@ export default function ProfilePage() {
   } = useSkillTrackStore();
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [fullName, setFullName] = useState(profile.full_name || 'Study Scholar');
-  const [email, setEmail] = useState(profile.email || user?.email || 'scholar@skilltrack.app');
-  const [bio, setBio] = useState(profile.bio || 'Mastering Data Structures & Algorithms and System Design');
-  const [targetHours, setTargetHours] = useState(profile.target_hours_per_week || 15);
-  const [timezone, setTimezone] = useState(profile.timezone || 'Asia/Kolkata');
+  const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [email, setEmail] = useState(profile?.email || user?.email || '');
+  const [bio, setBio] = useState(profile?.bio || '');
+  const [targetHours, setTargetHours] = useState(profile?.target_hours_per_week || 10);
+  const [timezone, setTimezone] = useState(profile?.timezone || 'Asia/Kolkata');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   // Quick Add Task Form State
@@ -61,6 +59,17 @@ export default function ProfilePage() {
   const [taskDays, setTaskDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [taskNotes, setTaskNotes] = useState('');
 
+  // Keep form synchronized when profile loads or updates
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name || '');
+      setEmail(profile.email || user?.email || '');
+      setBio(profile.bio || '');
+      setTargetHours(profile.target_hours_per_week || 10);
+      setTimezone(profile.timezone || 'Asia/Kolkata');
+    }
+  }, [profile, user]);
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     updateProfile({
@@ -70,7 +79,7 @@ export default function ProfilePage() {
       target_hours_per_week: Number(targetHours),
       timezone: timezone.trim(),
     });
-    setSaveMessage('Profile updated successfully!');
+    setSaveMessage('Profile details updated and saved to database!');
     setIsEditingProfile(false);
     setTimeout(() => setSaveMessage(null), 3000);
   };
@@ -107,8 +116,56 @@ export default function ProfilePage() {
     router.push('/login');
   };
 
+  // If unauthenticated, show a clean, welcoming login / sign-up screen
+  if (!user || !profile) {
+    return (
+      <div className="space-y-6">
+        <AppHeader
+          currentStreak={0}
+          syncStatus={syncStatus}
+          user={null}
+          profile={null}
+        />
+
+        <div className="flex items-center gap-2 text-xs text-surface-200">
+          <Link href="/" className="hover:text-white flex items-center gap-1">
+            <ChevronLeft className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Link>
+          <span>/</span>
+          <span className="text-white font-medium">Profile</span>
+        </div>
+
+        <div className="bg-surface-900 border border-surface-800 rounded-3xl p-8 sm:p-12 text-center max-w-lg mx-auto shadow-2xl relative overflow-hidden">
+          <div className="w-16 h-16 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center text-primary-400 mx-auto mb-4 shadow-inner">
+            <User className="w-8 h-8" />
+          </div>
+
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white mb-2">
+            No Account Active
+          </h1>
+
+          <p className="text-xs sm:text-sm text-surface-200/80 mb-6 leading-relaxed">
+            There are no default profiles. Create your personal account or sign in to set up your profile, customize your study tasks, and activate cloud-based mobile reminders.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/login"
+              className="py-3 px-6 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary-600/30 transition-all"
+            >
+              <span>Create Account / Sign In</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const totalCompletedCount = sessionLogs.filter((l) => l.status === 'completed').length;
   const totalDsaCount = dsaProblems.length;
+  const initialLetter = (profile.full_name || user.email || 'U').charAt(0).toUpperCase();
 
   return (
     <div className="space-y-6">
@@ -142,23 +199,23 @@ export default function ProfilePage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-primary-600 to-indigo-500 flex items-center justify-center text-white text-2xl sm:text-3xl font-extrabold uppercase shadow-xl shadow-primary-600/30 shrink-0">
-              {(profile.full_name || 'U').charAt(0)}
+              {initialLetter}
             </div>
 
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-                  {profile.full_name || 'Study Scholar'}
+                  {profile.full_name || 'My Profile'}
                 </h1>
                 <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300 border border-primary-500/30">
-                  {user?.isGuest ? 'Guest Scholar' : 'Active Account'}
+                  Active Account
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-surface-200/80 mt-0.5">
-                {profile.email || user?.email || 'scholar@skilltrack.app'}
+                {profile.email || user.email}
               </p>
               <p className="text-xs text-surface-200/70 mt-2 italic max-w-xl">
-                "{profile.bio || 'Dedicated to deliberate daily practice and algorithmic problem solving.'}"
+                "{profile.bio || 'Deliberate daily practice and study habits.'}"
               </p>
             </div>
           </div>
@@ -214,7 +271,7 @@ export default function ProfilePage() {
 
           <div className="bg-surface-800/40 border border-surface-700/50 rounded-2xl p-3">
             <div className="text-indigo-400 font-extrabold text-lg sm:text-xl">
-              {profile.target_hours_per_week || 15}h
+              {profile.target_hours_per_week || 10}h
             </div>
             <span className="text-[11px] text-surface-200/70 font-medium mt-0.5 block">
               Weekly Goal
@@ -320,7 +377,7 @@ export default function ProfilePage() {
               <span>Study Tasks & Sessions</span>
             </h2>
             <p className="text-xs text-surface-200/70">
-              Manage your scheduled learning blocks. The cloud scheduler sends alerts for these sessions.
+              Manage your personal scheduled learning tasks. Cloud reminders will notify your phone for these sessions.
             </p>
           </div>
 
@@ -446,59 +503,75 @@ export default function ProfilePage() {
         )}
 
         {/* Existing Tasks List */}
-        <div className="space-y-2.5">
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-800/60 border border-surface-700/60 hover:border-surface-700 transition-all text-xs"
+        {sessions.length === 0 ? (
+          <div className="text-center py-8 bg-surface-800/30 border border-dashed border-surface-700 rounded-2xl p-6">
+            <Calendar className="w-8 h-8 text-surface-200/40 mx-auto mb-2" />
+            <p className="text-xs sm:text-sm font-semibold text-white">No study tasks created yet</p>
+            <p className="text-xs text-surface-200/70 mt-1 max-w-sm mx-auto">
+              Add your scheduled learning tasks (e.g. Daily DSA, System Design) to track your progress and receive cloud reminders.
+            </p>
+            <button
+              onClick={() => setIsAddingTask(true)}
+              className="mt-3 px-3 py-1.5 rounded-lg bg-primary-600/20 text-primary-300 border border-primary-500/30 text-xs font-medium hover:bg-primary-600/30 transition-colors"
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="font-bold text-white text-sm sm:text-base truncate">
-                    {session.title}
-                  </span>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-primary-500/15 border border-primary-500/30 text-primary-300">
-                    {session.category}
-                  </span>
-                  <span className="text-[11px] text-surface-200/80 flex items-center gap-1 font-mono">
-                    <Clock className="w-3 h-3 text-primary-400" />
-                    <span>
-                      {session.start_time} - {session.end_time}
+              + Add Your First Task
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-surface-800/60 border border-surface-700/60 hover:border-surface-700 transition-all text-xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="font-bold text-white text-sm sm:text-base truncate">
+                      {session.title}
                     </span>
-                  </span>
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-primary-500/15 border border-primary-500/30 text-primary-300">
+                      {session.category}
+                    </span>
+                    <span className="text-[11px] text-surface-200/80 flex items-center gap-1 font-mono">
+                      <Clock className="w-3 h-3 text-primary-400" />
+                      <span>
+                        {session.start_time} - {session.end_time}
+                      </span>
+                    </span>
+                  </div>
+
+                  {session.notes && (
+                    <p className="text-surface-200/70 text-[11px] truncate italic">
+                      "{session.notes}"
+                    </p>
+                  )}
                 </div>
 
-                {session.notes && (
-                  <p className="text-surface-200/70 text-[11px] truncate italic">
-                    "{session.notes}"
-                  </p>
-                )}
-              </div>
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <button
+                    onClick={() => updateSession(session.id, { is_active: !session.is_active })}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                      session.is_active
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                        : 'bg-surface-700 text-surface-200/60 border-surface-600'
+                    }`}
+                  >
+                    {session.is_active ? 'Active' : 'Paused'}
+                  </button>
 
-              <div className="flex items-center gap-2 shrink-0 ml-3">
-                <button
-                  onClick={() => updateSession(session.id, { is_active: !session.is_active })}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
-                    session.is_active
-                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                      : 'bg-surface-700 text-surface-200/60 border-surface-600'
-                  }`}
-                >
-                  {session.is_active ? 'Active' : 'Paused'}
-                </button>
-
-                <button
-                  onClick={() => deleteSession(session.id)}
-                  className="p-1.5 rounded-lg hover:bg-rose-500/20 text-surface-200 hover:text-rose-400 transition-colors"
-                  title="Delete task"
-                  aria-label="Delete task"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  <button
+                    onClick={() => deleteSession(session.id)}
+                    className="p-1.5 rounded-lg hover:bg-rose-500/20 text-surface-200 hover:text-rose-400 transition-colors"
+                    title="Delete task"
+                    aria-label="Delete task"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

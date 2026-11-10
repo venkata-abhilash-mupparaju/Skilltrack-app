@@ -186,12 +186,6 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'timezone', 'Asia/Kolkata')
   );
 
-  -- Seed Default Starter Study Sessions
-  INSERT INTO public.study_sessions (user_id, title, category, start_time, end_time, days_of_week)
-  VALUES
-    (NEW.id, 'DSA Practice', 'DSA', '18:00:00', '19:00:00', '{0,1,2,3,4,5,6}'),
-    (NEW.id, 'System Design & Web Tech', 'Web Dev', '20:00:00', '21:00:00', '{1,2,3,4,5}');
-
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

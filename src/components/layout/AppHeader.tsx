@@ -20,7 +20,7 @@ import { UserProfile } from '@/types';
 interface AppHeaderProps {
   currentStreak?: number;
   syncStatus?: 'synced' | 'local' | 'syncing';
-  user?: { id: string; email: string | null; isGuest: boolean } | null;
+  user?: { id: string; email: string | null } | null;
   profile?: UserProfile | null;
   onOpenAddTask?: () => void;
 }
@@ -37,7 +37,7 @@ export function AppHeader({
 
   const displayName =
     profile?.full_name ||
-    (user?.email ? user.email.split('@')[0] : 'Study Scholar');
+    (user?.email ? user.email.split('@')[0] : 'Profile');
 
   return (
     <header className="sticky top-0 z-30 bg-surface-950/80 backdrop-blur-md border-b border-surface-800/80 transition-colors">

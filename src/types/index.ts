@@ -9,7 +9,7 @@ export interface Profile {
   current_streak: number;
   longest_streak: number;
   total_sessions_completed: number;
-  isGuest: boolean;
+  isGuest?: boolean;
   created_at?: string;
   updated_at?: string;
 }

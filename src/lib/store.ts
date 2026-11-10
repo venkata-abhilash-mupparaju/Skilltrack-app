@@ -13,83 +13,8 @@ import {
 } from '@/types';
 import { supabase, isSupabaseClientConfigured } from './supabase/client';
 
-const DEFAULT_SESSIONS: StudySession[] = [
-  {
-    id: 'session-dsa-daily',
-    user_id: 'guest-user',
-    title: 'DSA Practice',
-    category: 'DSA',
-    start_time: '18:00',
-    end_time: '19:00',
-    days_of_week: [0, 1, 2, 3, 4, 5, 6],
-    is_active: true,
-    notes: 'Solve 2 LeetCode Mediums on Graphs / Dynamic Programming.',
-  },
-  {
-    id: 'session-system-design',
-    user_id: 'guest-user',
-    title: 'System Design & High-Level Architecture',
-    category: 'Web Dev',
-    start_time: '20:00',
-    end_time: '21:00',
-    days_of_week: [1, 2, 3, 4, 5],
-    is_active: true,
-    notes: 'Read Designing Data-Intensive Applications chapter.',
-  },
-  {
-    id: 'session-cs-fundamentals',
-    user_id: 'guest-user',
-    title: 'Core CS & Operating Systems Revision',
-    category: 'Core CS',
-    start_time: '21:30',
-    end_time: '22:15',
-    days_of_week: [1, 3, 5],
-    is_active: true,
-    notes: 'Virtual memory, semaphores, and database index internals.',
-  },
-];
-
-const DEFAULT_DSA_PROBLEMS: DsaProblem[] = [
-  {
-    id: 'prob-1',
-    user_id: 'guest-user',
-    title: 'LRU Cache',
-    difficulty: 'Medium',
-    platform: 'LeetCode',
-    problem_url: 'https://leetcode.com/problems/lru-cache/',
-    tags: ['Hash Table', 'Linked List', 'Design'],
-    status: 'Solved',
-    notes: 'Used Doubly Linked List + HashMap for O(1) get and put.',
-    solved_at: new Date().toISOString().split('T')[0],
-  },
-  {
-    id: 'prob-2',
-    user_id: 'guest-user',
-    title: 'Trapping Rain Water',
-    difficulty: 'Hard',
-    platform: 'LeetCode',
-    problem_url: 'https://leetcode.com/problems/trapping-rain-water/',
-    tags: ['Two Pointers', 'Array', 'Stack'],
-    status: 'Solved',
-    notes: 'Two pointer approach maintaining leftMax and rightMax.',
-    solved_at: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-  },
-  {
-    id: 'prob-3',
-    user_id: 'guest-user',
-    title: 'Number of Islands',
-    difficulty: 'Medium',
-    platform: 'LeetCode',
-    problem_url: 'https://leetcode.com/problems/number-of-islands/',
-    tags: ['BFS', 'DFS', 'Graph'],
-    status: 'Solved',
-    notes: 'Classic BFS/DFS traversal mutating or marking visited cells.',
-    solved_at: new Date(Date.now() - 172800000).toISOString().split('T')[0],
-  },
-];
-
 const DEFAULT_SETTINGS: UserNotificationSettings = {
-  user_id: 'guest-user',
+  user_id: '',
   enabled: true,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
   reminder_before_minutes: 10,
@@ -111,335 +36,465 @@ const DEFAULT_SETTINGS: UserNotificationSettings = {
   },
 };
 
-const DEFAULT_PROFILE: UserProfile = {
-  id: 'guest-user',
-  email: 'learner@skilltrack.app',
-  full_name: 'Study Scholar',
-  avatar_url: '',
-  bio: 'Software engineer focusing on DSA & System Design',
-  target_hours_per_week: 14,
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
-  current_streak: 0,
-  longest_streak: 0,
-  total_sessions_completed: 0,
-  isGuest: false,
-};
-
 export function useSkillTrackStore() {
-  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
-  const [user, setUser] = useState<{ id: string; email: string | null; isGuest: boolean } | null>({
-    id: 'guest-user',
-    email: 'learner@skilltrack.app',
-    isGuest: false,
-  });
+  // Strictly null until user creates an account or signs in
+  const [user, setUser] = useState<{ id: string; email: string | null } | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Purely empty by default - no fake or pre-seeded tasks
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [dsaProblems, setDsaProblems] = useState<DsaProblem[]>([]);
   const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
+
   const [settings, setSettings] = useState<UserNotificationSettings>(DEFAULT_SETTINGS);
   const [devices, setDevices] = useState<PushSubscriptionItem[]>([]);
   const [deliveryLogs, setDeliveryLogs] = useState<NotificationLog[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'local' | 'syncing'>('local');
 
-  // Load initial data from localStorage & Supabase
+  // Load user data only if a logged-in account exists
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('skilltrack_user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
       const storedProfile = localStorage.getItem('skilltrack_profile');
-      if (storedProfile) {
-        setProfile(JSON.parse(storedProfile));
-      }
-      const storedSessions = localStorage.getItem('skilltrack_sessions');
-      const storedProblems = localStorage.getItem('skilltrack_dsa');
-      const storedLogs = localStorage.getItem('skilltrack_logs');
-      const storedSettings = localStorage.getItem('skilltrack_settings');
 
-      setSessions(storedSessions ? JSON.parse(storedSessions) : DEFAULT_SESSIONS);
-      setDsaProblems(storedProblems ? JSON.parse(storedProblems) : DEFAULT_DSA_PROBLEMS);
-      setSessionLogs(storedLogs ? JSON.parse(storedLogs) : []);
-      if (storedSettings) {
-        setSettings(JSON.parse(storedSettings));
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        if (storedProfile) {
+          setProfile(JSON.parse(storedProfile));
+        }
+
+        const storedSessions = localStorage.getItem('skilltrack_sessions');
+        const storedProblems = localStorage.getItem('skilltrack_dsa');
+        const storedLogs = localStorage.getItem('skilltrack_logs');
+        const storedSettings = localStorage.getItem('skilltrack_settings');
+
+        setSessions(storedSessions ? JSON.parse(storedSessions) : []);
+        setDsaProblems(storedProblems ? JSON.parse(storedProblems) : []);
+        setSessionLogs(storedLogs ? JSON.parse(storedLogs) : []);
+        if (storedSettings) setSettings(JSON.parse(storedSettings));
+      } else {
+        // No account logged in - keep completely empty
+        setUser(null);
+        setProfile(null);
+        setSessions([]);
+        setDsaProblems([]);
+        setSessionLogs([]);
       }
     } catch (e) {
-      console.warn('Could not read from local storage:', e);
-      setSessions(DEFAULT_SESSIONS);
-      setDsaProblems(DEFAULT_DSA_PROBLEMS);
+      console.warn('Could not read user state from storage:', e);
+      setUser(null);
+      setProfile(null);
+      setSessions([]);
+      setDsaProblems([]);
     }
 
     setIsLoaded(true);
 
-    // Fetch registered devices from backend
-    fetch('/api/push/subscribe?userId=guest-user')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.subscriptions) {
-          setDevices(data.subscriptions);
-        }
-      })
-      .catch(() => {});
-
-    // Sync with Supabase if configured
+    // Sync with Supabase Auth session if configured
     if (isSupabaseClientConfigured && supabase) {
-      setSyncStatus('syncing');
-      Promise.all([
-        supabase.from('study_sessions').select('*'),
-        supabase.from('dsa_problems').select('*'),
-        supabase.from('session_logs').select('*'),
-        supabase.from('user_notification_settings').select('*').single(),
-        supabase.from('notification_logs').select('*').order('sent_at', { ascending: false }).limit(20),
-      ])
-        .then(([sessRes, dsaRes, logsRes, settRes, notifRes]) => {
-          if (sessRes.data && sessRes.data.length > 0) setSessions(sessRes.data);
-          if (dsaRes.data && dsaRes.data.length > 0) setDsaProblems(dsaRes.data);
-          if (logsRes.data && logsRes.data.length > 0) setSessionLogs(logsRes.data);
-          if (settRes.data) setSettings(settRes.data);
-          if (notifRes.data) setDeliveryLogs(notifRes.data);
-          setSyncStatus('synced');
-        })
-        .catch(() => setSyncStatus('local'));
+      const client = supabase;
+      client.auth.getSession().then(({ data: { session } }) => {
+        if (session && session.user) {
+          const authedUser = { id: session.user.id, email: session.user.email ?? null };
+          setUser(authedUser);
+          localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
+
+          // Load profile from database
+          client
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+            .then(({ data: profData }) => {
+              if (profData) {
+                setProfile(profData);
+                localStorage.setItem('skilltrack_profile', JSON.stringify(profData));
+              }
+            });
+
+          // Load only this user's study sessions & DSA problems
+          setSyncStatus('syncing');
+          Promise.all([
+            client.from('study_sessions').select('*').eq('user_id', session.user.id),
+            client.from('dsa_problems').select('*').eq('user_id', session.user.id),
+            client.from('session_logs').select('*').eq('user_id', session.user.id),
+            client.from('user_notification_settings').select('*').eq('user_id', session.user.id).single(),
+            client.from('push_subscriptions').select('*').eq('user_id', session.user.id),
+          ])
+            .then(([sessRes, dsaRes, logsRes, settRes, devRes]) => {
+              if (sessRes.data) setSessions(sessRes.data);
+              if (dsaRes.data) setDsaProblems(dsaRes.data);
+              if (logsRes.data) setSessionLogs(logsRes.data);
+              if (settRes.data) setSettings(settRes.data);
+              if (devRes.data) setDevices(devRes.data);
+              setSyncStatus('synced');
+            })
+            .catch(() => setSyncStatus('local'));
+        }
+      });
     }
   }, []);
 
-  // Save changes to localStorage
+  // Save changes to localStorage only if user is logged in
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || !user) return;
     try {
       localStorage.setItem('skilltrack_sessions', JSON.stringify(sessions));
       localStorage.setItem('skilltrack_dsa', JSON.stringify(dsaProblems));
       localStorage.setItem('skilltrack_logs', JSON.stringify(sessionLogs));
       localStorage.setItem('skilltrack_settings', JSON.stringify(settings));
-      localStorage.setItem('skilltrack_profile', JSON.stringify(profile));
+      if (profile) {
+        localStorage.setItem('skilltrack_profile', JSON.stringify(profile));
+      }
     } catch (e) {
       console.warn('Failed to save to local storage:', e);
     }
-  }, [sessions, dsaProblems, sessionLogs, settings, profile, isLoaded]);
+  }, [sessions, dsaProblems, sessionLogs, settings, profile, user, isLoaded]);
 
-  // Actions
-  const addSession = useCallback((newSession: Omit<StudySession, 'id' | 'user_id'>) => {
-    const session: StudySession = {
-      ...newSession,
-      id: `sess-${Date.now()}`,
-      user_id: 'guest-user',
-    };
-    setSessions((prev) => [...prev, session]);
+  // Account Creation: Only now is the profile database updated
+  const signUpWithEmail = useCallback(
+    async (fullName: string, email: string, pass: string) => {
+      let authedUser: { id: string; email: string | null };
+      let newProfile: UserProfile;
 
-    if (supabase) {
-      supabase.from('study_sessions').insert(session).then();
-    }
-    return session;
-  }, []);
+      if (isSupabaseClientConfigured && supabase) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: pass,
+          options: {
+            data: { full_name: fullName },
+          },
+        });
 
-  const updateSession = useCallback((id: string, updates: Partial<StudySession>) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    );
-    if (supabase) {
-      supabase.from('study_sessions').update(updates).eq('id', id).then();
-    }
-  }, []);
+        if (error) throw error;
+        if (!data.user) throw new Error('Account registration failed.');
 
-  const deleteSession = useCallback((id: string) => {
-    setSessions((prev) => prev.filter((s) => s.id !== id));
-    if (supabase) {
-      supabase.from('study_sessions').delete().eq('id', id).then();
-    }
-  }, []);
-
-  const toggleSessionCompletion = useCallback((sessionId: string, date: string = new Date().toISOString().split('T')[0]) => {
-    setSessionLogs((prev) => {
-      const existing = prev.find((l) => l.session_id === sessionId && l.date === date);
-      let updatedLogs: SessionLog[];
-
-      if (existing) {
-        // Toggle status
-        const nextStatus = existing.status === 'completed' ? 'in_progress' : 'completed';
-        updatedLogs = prev.map((l) =>
-          l.id === existing.id ? { ...l, status: nextStatus, completed_at: new Date().toISOString() } : l
-        );
-        if (supabase) {
-          supabase.from('session_logs').update({ status: nextStatus }).eq('id', existing.id).then();
-        }
-      } else {
-        const newLog: SessionLog = {
-          id: `log-${Date.now()}`,
-          user_id: 'guest-user',
-          session_id: sessionId,
-          date,
-          status: 'completed',
-          problems_solved: 0,
-          duration_minutes: 60,
-          completed_at: new Date().toISOString(),
+        authedUser = { id: data.user.id, email: data.user.email ?? email };
+        newProfile = {
+          id: data.user.id,
+          email: data.user.email ?? email,
+          full_name: fullName,
+          bio: '',
+          target_hours_per_week: 10,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          current_streak: 0,
+          longest_streak: 0,
+          total_sessions_completed: 0,
+          isGuest: false,
         };
-        updatedLogs = [...prev, newLog];
-        if (supabase) {
-          supabase.from('session_logs').insert(newLog).then();
-        }
+
+        // Insert actual user profile into database
+        await supabase.from('profiles').upsert(newProfile);
+      } else {
+        // Local account creation
+        const localId = `user_${Date.now()}`;
+        authedUser = { id: localId, email };
+        newProfile = {
+          id: localId,
+          email,
+          full_name: fullName,
+          bio: '',
+          target_hours_per_week: 10,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+          current_streak: 0,
+          longest_streak: 0,
+          total_sessions_completed: 0,
+          isGuest: false,
+        };
       }
-      return updatedLogs;
-    });
-  }, []);
 
-  const addDsaProblem = useCallback((problem: Omit<DsaProblem, 'id' | 'user_id' | 'solved_at'>) => {
-    const today = new Date().toISOString().split('T')[0];
-    const newProb: DsaProblem = {
-      ...problem,
-      id: `prob-${Date.now()}`,
-      user_id: 'guest-user',
-      solved_at: today,
-    };
-    setDsaProblems((prev) => [newProb, ...prev]);
+      setUser(authedUser);
+      setProfile(newProfile);
+      setSessions([]);
+      setDsaProblems([]);
+      setSessionLogs([]);
 
-    if (supabase) {
-      supabase.from('dsa_problems').insert(newProb).then();
-    }
-    return newProb;
-  }, []);
+      localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
+      localStorage.setItem('skilltrack_profile', JSON.stringify(newProfile));
+      localStorage.removeItem('skilltrack_sessions');
+      localStorage.removeItem('skilltrack_dsa');
+      localStorage.removeItem('skilltrack_logs');
 
-  const deleteDsaProblem = useCallback((id: string) => {
-    setDsaProblems((prev) => prev.filter((p) => p.id !== id));
-    if (supabase) {
-      supabase.from('dsa_problems').delete().eq('id', id).then();
-    }
-  }, []);
-
-  const updateSettings = useCallback((newSettings: Partial<UserNotificationSettings>) => {
-    setSettings((prev) => {
-      const merged = { ...prev, ...newSettings };
-      if (supabase) {
-        supabase.from('user_notification_settings').upsert(merged).then();
-      }
-      return merged;
-    });
-  }, []);
-
-  const refreshDevices = useCallback(async () => {
-    try {
-      const res = await fetch('/api/push/subscribe?userId=guest-user');
-      const data = await res.json();
-      if (data.subscriptions) {
-        setDevices(data.subscriptions);
-      }
-    } catch {}
-  }, []);
-
-  const removeDevice = useCallback(async (endpoint: string) => {
-    try {
-      await fetch('/api/push/unsubscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint, userId: 'guest-user' }),
-      });
-      setDevices((prev) => prev.filter((d) => d.endpoint !== endpoint));
-    } catch (e) {
-      console.error('Failed to remove device:', e);
-    }
-  }, []);
-
-  // Compute stats
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayDayOfWeek = new Date().getDay(); // 0 to 6
-
-  const todaySessions = sessions.filter(
-    (s) => s.is_active && (s.days_of_week || []).includes(todayDayOfWeek)
+      return { user: authedUser, profile: newProfile };
+    },
+    []
   );
 
-  const completedTodayCount = todaySessions.filter((s) => {
-    const log = sessionLogs.find((l) => l.session_id === s.id && l.date === todayStr);
-    return log?.status === 'completed';
-  }).length;
-
-  const totalDsaSolved = dsaProblems.filter((p) => p.status === 'Solved').length;
-
+  // Sign In
   const signInWithEmail = useCallback(async (email: string, pass: string) => {
+    let authedUser: { id: string; email: string | null };
+    let loadedProfile: UserProfile;
+
     if (isSupabaseClientConfigured && supabase) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
+      });
+
       if (error) throw error;
-      if (data.user) {
-        const authedUser = { id: data.user.id, email: data.user.email ?? email, isGuest: false };
-        setUser(authedUser);
-        setProfile((prev) => ({
-          ...prev,
-          id: authedUser.id,
-          email: authedUser.email,
-          full_name: prev.full_name || authedUser.email.split('@')[0],
-        }));
-        localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
-        return authedUser;
-      }
+      if (!data.user) throw new Error('Sign in failed.');
+
+      authedUser = { id: data.user.id, email: data.user.email ?? email };
+
+      const { data: profData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      loadedProfile = profData || {
+        id: data.user.id,
+        email: data.user.email ?? email,
+        full_name: email.split('@')[0],
+        timezone: 'Asia/Kolkata',
+        current_streak: 0,
+        longest_streak: 0,
+        total_sessions_completed: 0,
+        isGuest: false,
+      };
+
+      // Load user's actual sessions & problems
+      const { data: userSessions } = await supabase
+        .from('study_sessions')
+        .select('*')
+        .eq('user_id', data.user.id);
+      const { data: userProblems } = await supabase
+        .from('dsa_problems')
+        .select('*')
+        .eq('user_id', data.user.id);
+      const { data: userLogs } = await supabase
+        .from('session_logs')
+        .select('*')
+        .eq('user_id', data.user.id);
+
+      setSessions(userSessions || []);
+      setDsaProblems(userProblems || []);
+      setSessionLogs(userLogs || []);
+    } else {
+      // Local sign in
+      const localId = `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      authedUser = { id: localId, email };
+      loadedProfile = {
+        id: localId,
+        email,
+        full_name: email.split('@')[0],
+        timezone: 'Asia/Kolkata',
+        current_streak: 0,
+        longest_streak: 0,
+        total_sessions_completed: 0,
+        isGuest: false,
+      };
+      setSessions([]);
+      setDsaProblems([]);
+      setSessionLogs([]);
     }
-    // Local fallback login
-    const localUser = { id: `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`, email, isGuest: false };
-    setUser(localUser);
-    setProfile((prev) => ({
-      ...prev,
-      id: localUser.id,
-      email: localUser.email,
-      full_name: prev.full_name || email.split('@')[0],
-    }));
-    localStorage.setItem('skilltrack_user', JSON.stringify(localUser));
-    return localUser;
+
+    setUser(authedUser);
+    setProfile(loadedProfile);
+    localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
+    localStorage.setItem('skilltrack_profile', JSON.stringify(loadedProfile));
+
+    return { user: authedUser, profile: loadedProfile };
   }, []);
 
-  const signUpWithEmail = useCallback(async (email: string, pass: string) => {
-    if (isSupabaseClientConfigured && supabase) {
-      const { data, error } = await supabase.auth.signUp({ email, password: pass });
-      if (error) throw error;
-      if (data.user) {
-        const authedUser = { id: data.user.id, email: data.user.email ?? email, isGuest: false };
-        setUser(authedUser);
-        localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
-        return authedUser;
-      }
-    }
-    const localUser = { id: `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`, email, isGuest: false };
-    setUser(localUser);
-    localStorage.setItem('skilltrack_user', JSON.stringify(localUser));
-    return localUser;
-  }, []);
-
-  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
-    setProfile((prev) => {
-      const merged = { ...prev, ...updates };
-      if (supabase && prev.id && prev.id !== 'guest-user') {
-        supabase.from('profiles').update(updates).eq('id', prev.id).then();
-      }
-      return merged;
-    });
-  }, []);
-
-  const signInAsGuest = useCallback(() => {
-    const guestUser = { id: 'guest-user', email: 'guest@skilltrack.app', isGuest: false };
-    setUser(guestUser);
-    setProfile((prev) => ({
-      ...prev,
-      id: 'guest-user',
-      full_name: prev.full_name || 'Study Scholar',
-      email: 'guest@skilltrack.app',
-      isGuest: false,
-    }));
-    localStorage.setItem('skilltrack_user', JSON.stringify(guestUser));
-    return guestUser;
-  }, []);
-
+  // Sign Out: Clears all user data completely
   const signOut = useCallback(async () => {
     if (isSupabaseClientConfigured && supabase) {
       await supabase.auth.signOut().catch(() => {});
     }
     setUser(null);
+    setProfile(null);
+    setSessions([]);
+    setDsaProblems([]);
+    setSessionLogs([]);
+
     localStorage.removeItem('skilltrack_user');
+    localStorage.removeItem('skilltrack_profile');
+    localStorage.removeItem('skilltrack_sessions');
+    localStorage.removeItem('skilltrack_dsa');
+    localStorage.removeItem('skilltrack_logs');
   }, []);
 
-  // Dynamically calculate actual consecutive days streak from completed logs
+  // Update Profile: Modifies database for this authenticated user
+  const updateProfile = useCallback(
+    (updates: Partial<UserProfile>) => {
+      if (!user) return;
+      setProfile((prev) => {
+        if (!prev) return null;
+        const merged = { ...prev, ...updates };
+        if (supabase && isSupabaseClientConfigured && user.id) {
+          supabase.from('profiles').update(updates).eq('id', user.id).then();
+        }
+        return merged;
+      });
+    },
+    [user]
+  );
+
+  // Add Session / Task
+  const addSession = useCallback(
+    (newSession: Omit<StudySession, 'id' | 'user_id'>) => {
+      const currentUserId = user ? user.id : 'anonymous';
+      const session: StudySession = {
+        ...newSession,
+        id: `sess-${Date.now()}`,
+        user_id: currentUserId,
+      };
+      setSessions((prev) => [...prev, session]);
+
+      if (supabase && user) {
+        supabase.from('study_sessions').insert(session).then();
+      }
+      return session;
+    },
+    [user]
+  );
+
+  const updateSession = useCallback(
+    (id: string, updates: Partial<StudySession>) => {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+      );
+      if (supabase && user) {
+        supabase.from('study_sessions').update(updates).eq('id', id).then();
+      }
+    },
+    [user]
+  );
+
+  const deleteSession = useCallback(
+    (id: string) => {
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      if (supabase && user) {
+        supabase.from('study_sessions').delete().eq('id', id).then();
+      }
+    },
+    [user]
+  );
+
+  const toggleSessionCompletion = useCallback(
+    (sessionId: string, date: string = new Date().toISOString().split('T')[0]) => {
+      const currentUserId = user ? user.id : 'anonymous';
+      setSessionLogs((prev) => {
+        const existing = prev.find((l) => l.session_id === sessionId && l.date === date);
+        let updatedLogs: SessionLog[];
+
+        if (existing) {
+          const nextStatus = existing.status === 'completed' ? 'in_progress' : 'completed';
+          updatedLogs = prev.map((l) =>
+            l.id === existing.id
+              ? { ...l, status: nextStatus, completed_at: new Date().toISOString() }
+              : l
+          );
+          if (supabase && user) {
+            supabase.from('session_logs').update({ status: nextStatus }).eq('id', existing.id).then();
+          }
+        } else {
+          const newLog: SessionLog = {
+            id: `log-${Date.now()}`,
+            user_id: currentUserId,
+            session_id: sessionId,
+            date,
+            status: 'completed',
+            problems_solved: 0,
+            duration_minutes: 60,
+            completed_at: new Date().toISOString(),
+          };
+          updatedLogs = [...prev, newLog];
+          if (supabase && user) {
+            supabase.from('session_logs').insert(newLog).then();
+          }
+        }
+        return updatedLogs;
+      });
+    },
+    [user]
+  );
+
+  const addDsaProblem = useCallback(
+    (problem: Omit<DsaProblem, 'id' | 'user_id' | 'solved_at'>) => {
+      const currentUserId = user ? user.id : 'anonymous';
+      const today = new Date().toISOString().split('T')[0];
+      const newProb: DsaProblem = {
+        ...problem,
+        id: `prob-${Date.now()}`,
+        user_id: currentUserId,
+        solved_at: today,
+      };
+      setDsaProblems((prev) => [newProb, ...prev]);
+
+      if (supabase && user) {
+        supabase.from('dsa_problems').insert(newProb).then();
+      }
+      return newProb;
+    },
+    [user]
+  );
+
+  const deleteDsaProblem = useCallback(
+    (id: string) => {
+      setDsaProblems((prev) => prev.filter((p) => p.id !== id));
+      if (supabase && user) {
+        supabase.from('dsa_problems').delete().eq('id', id).then();
+      }
+    },
+    [user]
+  );
+
+  const updateSettings = useCallback(
+    (newSettings: Partial<UserNotificationSettings>) => {
+      setSettings((prev) => {
+        const merged = { ...prev, ...newSettings };
+        if (supabase && user) {
+          supabase
+            .from('user_notification_settings')
+            .upsert({ ...merged, user_id: user.id })
+            .then();
+        }
+        return merged;
+      });
+    },
+    [user]
+  );
+
+  const refreshDevices = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`/api/push/subscribe?userId=${user.id}`);
+      const data = await res.json();
+      if (data.subscriptions) {
+        setDevices(data.subscriptions);
+      }
+    } catch {}
+  }, [user]);
+
+  const removeDevice = useCallback(
+    async (endpoint: string) => {
+      if (!user) return;
+      try {
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint, userId: user.id }),
+        });
+        setDevices((prev) => prev.filter((d) => d.endpoint !== endpoint));
+      } catch (e) {
+        console.error('Failed to remove device:', e);
+      }
+    },
+    [user]
+  );
+
+  // Dynamic consecutive days streak calculation based purely on completed logs
   const dynamicStreak = (() => {
     const completedDates = new Set(
       sessionLogs.filter((l) => l.status === 'completed').map((l) => l.date)
     );
 
     if (completedDates.size === 0) {
-      return profile.current_streak || 0;
+      return 0;
     }
 
     const formatYmd = (d: Date) => {
@@ -462,7 +517,7 @@ export function useSkillTrackStore() {
       if (completedDates.has(yesterdayStr)) {
         checkDate = yesterday;
       } else {
-        return profile.current_streak || 0;
+        return 0;
       }
     }
 
@@ -476,8 +531,22 @@ export function useSkillTrackStore() {
       }
     }
 
-    return Math.max(streak, profile.current_streak || 0);
+    return streak;
   })();
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayDayOfWeek = new Date().getDay();
+
+  const todaySessions = sessions.filter(
+    (s) => s.is_active && (s.days_of_week || []).includes(todayDayOfWeek)
+  );
+
+  const completedTodayCount = todaySessions.filter((s) => {
+    const log = sessionLogs.find((l) => l.session_id === s.id && l.date === todayStr);
+    return log?.status === 'completed';
+  }).length;
+
+  const totalDsaSolved = dsaProblems.filter((p) => p.status === 'Solved').length;
 
   return {
     user,
@@ -506,7 +575,6 @@ export function useSkillTrackStore() {
     removeDevice,
     signInWithEmail,
     signUpWithEmail,
-    signInAsGuest,
     signOut,
   };
 }
