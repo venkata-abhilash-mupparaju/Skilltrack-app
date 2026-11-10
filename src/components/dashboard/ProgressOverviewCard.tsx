@@ -77,11 +77,7 @@ export function ProgressOverviewCard({
               <span>{currentStreak}</span>
               <span className="text-surface-200 text-sm font-normal">Days In A Row</span>
             </div>
-            <p className="text-xs text-surface-200/70 mt-1">
-              {currentStreak > 0
-                ? 'Consecutive daily study completed. Keep your streak alive!'
-                : 'Complete your scheduled sessions to start your consistency streak!'}
-            </p>
+            <p className="text-xs text-surface-200/70 mt-1">Daily study streak</p>
           </div>
 
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">

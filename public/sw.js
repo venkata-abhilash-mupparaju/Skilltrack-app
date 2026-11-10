@@ -1,5 +1,5 @@
 // SkillTrack Service Worker with Web Push & Offline Support
-const CACHE_NAME = 'skilltrack-cache-v2';
+const CACHE_NAME = 'skilltrack-cache-v3';
 const OFFLINE_URL = '/offline.html';
 
 const ASSETS_TO_CACHE = [

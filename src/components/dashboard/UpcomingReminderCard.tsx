@@ -127,13 +127,10 @@ export function UpcomingReminderCard({ sessions, settings, onSendTest }: Upcomin
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary-500/15 border border-primary-500/30 flex items-center justify-center text-primary-400">
-            <Bell className="w-4 h-4 animate-bounce" />
+            <Bell className="w-4 h-4" />
           </div>
           <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary-400">
-              Cloud Reminder Engine
-            </span>
-            <h2 className="text-sm sm:text-base font-bold text-white">Next Scheduled Push</h2>
+            <h2 className="text-sm sm:text-base font-bold text-white">Upcoming Reminder</h2>
           </div>
         </div>
 
@@ -141,52 +138,35 @@ export function UpcomingReminderCard({ sessions, settings, onSendTest }: Upcomin
           href="/settings/notifications"
           className="text-xs text-primary-400 hover:text-primary-300 font-medium hover:underline flex items-center gap-1"
         >
-          <span>Preferences</span>
+          <span>Settings</span>
           <span>&rarr;</span>
         </Link>
       </div>
 
       {upcomingInfo.session ? (
-        <div className="space-y-3">
-          <div className="bg-surface-800/80 border border-surface-700/60 rounded-xl p-3.5">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="font-semibold text-white text-sm sm:text-base truncate">
-                {upcomingInfo.session.title}
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300 font-medium text-[11px] shrink-0">
-                {upcomingInfo.reminderTimeStr} ({upcomingInfo.countdownStr})
-              </span>
-            </div>
-
-            <p className="text-xs text-surface-200/80 flex items-center gap-1.5 mt-1">
-              <Clock className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-              <span>
-                Session Start: <strong>{upcomingInfo.session.start_time}</strong> (
-                {settings.reminder_before_minutes}m advance alert)
-              </span>
-            </p>
+        <div className="bg-surface-800/80 border border-surface-700/60 rounded-xl p-3.5">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-semibold text-white text-sm sm:text-base truncate">
+              {upcomingInfo.session.title}
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-primary-500/20 text-primary-300 font-medium text-[11px] shrink-0">
+              {upcomingInfo.reminderTimeStr} ({upcomingInfo.countdownStr})
+            </span>
           </div>
 
-          <div className="bg-primary-950/40 border border-primary-500/20 rounded-xl p-3 text-xs text-primary-200 flex items-start gap-2.5">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0 animate-ping" />
-            <div>
-              <span className="text-[10px] uppercase font-bold text-primary-400 tracking-wider">
-                Cloud Dispatcher Active
-              </span>
-              <p className="text-surface-200 text-xs mt-0.5">
-                This notification will arrive on your phone at <strong>{upcomingInfo.reminderTimeStr}</strong> even if your laptop is shut down.
-              </p>
-            </div>
-          </div>
+          <p className="text-xs text-surface-200/80 flex items-center gap-1.5 mt-1">
+            <Clock className="w-3.5 h-3.5 text-primary-400 shrink-0" />
+            <span>
+              Session: <strong>{upcomingInfo.session.start_time}</strong> (
+              {settings.reminder_before_minutes}m alert)
+            </span>
+          </p>
         </div>
       ) : (
         <div className="py-4 text-center">
           <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
           <p className="text-xs sm:text-sm text-surface-200 font-medium">
             {upcomingInfo.countdownStr}
-          </p>
-          <p className="text-[11px] text-surface-200/60 mt-1">
-            Configure more recurring study blocks in the Schedule tab.
           </p>
         </div>
       )}

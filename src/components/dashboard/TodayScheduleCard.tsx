@@ -77,7 +77,6 @@ export function TodayScheduleCard({
               {sessions.length} sessions
             </span>
           </h2>
-          <p className="text-xs text-surface-200/70">Tap the checkmark when you finish a session</p>
         </div>
 
         <button

@@ -12,7 +12,6 @@ import {
   ArrowRight,
   CheckCircle,
   AlertCircle,
-  Globe,
   ShieldCheck,
   Cloud,
   Database,
@@ -100,13 +99,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[85vh] flex flex-col items-center justify-center py-6 px-4">
-      {/* English Language Banner */}
-      <div className="mb-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-900 border border-primary-500/30 text-xs text-primary-300 shadow-md">
-        <Globe className="w-3.5 h-3.5 text-primary-400" />
-        <span>Language: <strong>English (US)</strong></span>
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-      </div>
-
       <div className="bg-surface-900 border border-surface-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative overflow-hidden">
         {/* Background Decorative Glow */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-primary-600/10 rounded-full blur-3xl pointer-events-none" />
