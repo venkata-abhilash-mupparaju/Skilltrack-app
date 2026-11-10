@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { getServiceSupabase } from '@/lib/supabase/server';
 import { localSubscriptionsCache } from '@/lib/pwa/subscriptionCache';
+import { userSyncCache } from '@/lib/pwa/syncStore';
 
 const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 const vapidPrivate = process.env.VAPID_PRIVATE_KEY || '';
@@ -119,23 +120,16 @@ async function handleCronJob(req: NextRequest) {
   };
 
   try {
-    // If Supabase is configured, use database
+    const settingsMap = new Map<string, any>();
+    const userSubsMap = new Map<string, any[]>();
+    const targetUserIds = new Set<string>();
+
+    // 1. Fetch from Supabase if configured
     if (supabase) {
-      // 1. Fetch all users who have active push subscriptions
-      const { data: subsList } = await supabase
-        .from('push_subscriptions')
-        .select('*');
+      const { data: subsList } = await supabase.from('push_subscriptions').select('*');
+      const { data: allSettings } = await supabase.from('user_notification_settings').select('*');
 
-      // 2. Fetch user notification settings
-      const { data: allSettings } = await supabase
-        .from('user_notification_settings')
-        .select('*');
-
-      const settingsMap = new Map<string, any>();
       (allSettings || []).forEach((s) => settingsMap.set(s.user_id, s));
-
-      // Group subscriptions by user_id
-      const userSubsMap = new Map<string, any[]>();
       (subsList || []).forEach((sub) => {
         if (!sub.user_id) return;
         const current = userSubsMap.get(sub.user_id) || [];
@@ -143,52 +137,99 @@ async function handleCronJob(req: NextRequest) {
         userSubsMap.set(sub.user_id, current);
       });
 
-      // Target users: all users with enrolled devices or enabled settings
-      const targetUserIds = new Set<string>();
       (allSettings || []).filter((s) => s.enabled).forEach((s) => targetUserIds.add(s.user_id));
       Array.from(userSubsMap.keys()).forEach((uid) => targetUserIds.add(uid));
+    }
 
-      for (const userId of targetUserIds) {
-        summary.processedUsers++;
-        const settings = settingsMap.get(userId) || {
-          user_id: userId,
-          enabled: true,
-          timezone: 'Asia/Kolkata',
-          reminder_before_minutes: 10,
-          reminder_at_start: true,
-          reminder_missed: true,
-          missed_threshold_minutes: 30,
-          daily_summary: true,
-          quiet_hours_enabled: false,
-          quiet_hours_start: '22:00',
-          quiet_hours_end: '07:00',
-        };
+    // 2. Fetch from active memory sync cache (synced from mobile app)
+    for (const [uid, cachedData] of Array.from(userSyncCache.entries())) {
+      targetUserIds.add(uid);
+      if (!settingsMap.has(uid) && cachedData.settings) {
+        settingsMap.set(uid, { user_id: uid, ...cachedData.settings });
+      }
+      if (cachedData.subscription?.endpoint) {
+        const current = userSubsMap.get(uid) || [];
+        if (!current.some((s) => s.endpoint === cachedData.subscription?.endpoint)) {
+          current.push({
+            endpoint: cachedData.subscription.endpoint,
+            p256dh: cachedData.subscription.keys.p256dh,
+            auth: cachedData.subscription.keys.auth,
+          });
+          userSubsMap.set(uid, current);
+        }
+      }
+    }
 
-        const userTz = settings.timezone || 'Asia/Kolkata';
-        const local = getUserLocalTime(now, userTz);
+    // 3. Fallback: if userSubsMap has nothing, check localSubscriptionsCache
+    if (userSubsMap.size === 0 && localSubscriptionsCache.size > 0) {
+      for (const [endpoint, sub] of Array.from(localSubscriptionsCache.entries())) {
+        const uid = sub.user_id || 'guest-user';
+        targetUserIds.add(uid);
+        const current = userSubsMap.get(uid) || [];
+        current.push(sub);
+        userSubsMap.set(uid, current);
+      }
+    }
 
-        const inQuiet = settings.quiet_hours_enabled
-          ? isInQuietHours(local.totalMinutes, settings.quiet_hours_start, settings.quiet_hours_end)
-          : false;
+    for (const userId of targetUserIds) {
+      summary.processedUsers++;
+      const settings = settingsMap.get(userId) || {
+        user_id: userId,
+        enabled: true,
+        timezone: 'Asia/Kolkata',
+        reminder_before_minutes: 10,
+        reminder_at_start: true,
+        reminder_missed: true,
+        missed_threshold_minutes: 30,
+        daily_summary: true,
+        quiet_hours_enabled: false,
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '07:00',
+      };
 
+      const userTz = settings.timezone || 'Asia/Kolkata';
+      const local = getUserLocalTime(now, userTz);
+
+      const inQuiet = settings.quiet_hours_enabled
+        ? isInQuietHours(local.totalMinutes, settings.quiet_hours_start, settings.quiet_hours_end)
+        : false;
+
+      let sessions: any[] = [];
+
+      // Try database sessions first
+      if (supabase) {
         const { data: rawSessions } = await supabase
           .from('study_sessions')
           .select('*')
           .eq('user_id', userId)
           .eq('is_active', true);
 
-        // Filter sessions active for today in JavaScript
-        const sessions = (rawSessions || []).filter((s) => {
+        sessions = (rawSessions || []).filter((s) => {
           const days = Array.isArray(s.days_of_week) && s.days_of_week.length > 0
             ? s.days_of_week
             : [0, 1, 2, 3, 4, 5, 6];
           return days.includes(local.dayOfWeek);
         });
+      }
 
-        if (sessions.length === 0) continue;
+      // If database has 0 sessions, load from userSyncCache
+      if (sessions.length === 0 && userSyncCache.has(userId)) {
+        const cached = userSyncCache.get(userId);
+        if (cached && Array.isArray(cached.sessions)) {
+          sessions = cached.sessions.filter((s: any) => {
+            if (!s.is_active) return false;
+            const days = Array.isArray(s.days_of_week) && s.days_of_week.length > 0
+              ? s.days_of_week
+              : [0, 1, 2, 3, 4, 5, 6];
+            return days.includes(local.dayOfWeek);
+          });
+        }
+      }
 
-        const subscriptions = userSubsMap.get(userId) || [];
-        if (subscriptions.length === 0) continue;
+      if (sessions.length === 0) continue;
+
+      const subscriptions = userSubsMap.get(userId) || [];
+      if (subscriptions.length === 0) continue;
 
         for (const session of sessions) {
           const startMinutes = parseTimeToMinutes(session.start_time);
@@ -221,15 +262,19 @@ async function handleCronJob(req: NextRequest) {
             local.totalMinutes >= endMinutes + (settings.missed_threshold_minutes || 30) &&
             local.totalMinutes <= endMinutes + (settings.missed_threshold_minutes || 30) + 15
           ) {
-            const { data: log } = await supabase
-              .from('session_logs')
-              .select('id, status')
-              .eq('user_id', settings.user_id)
-              .eq('session_id', session.id)
-              .eq('date', local.dateStr)
-              .single();
+            let isCompleted = false;
+            if (supabase) {
+              const { data: log } = await supabase
+                .from('session_logs')
+                .select('id, status')
+                .eq('user_id', settings.user_id)
+                .eq('session_id', session.id)
+                .eq('date', local.dateStr)
+                .single();
+              isCompleted = log?.status === 'completed';
+            }
 
-            if (!log || log.status !== 'completed') {
+            if (!isCompleted) {
               reminderType = 'missed_session';
               title = `⚠️ Incomplete Session: ${session.title}`;
               body = `You haven't checked off your ${session.title} session today yet. Keep your streak alive!`;
@@ -237,9 +282,15 @@ async function handleCronJob(req: NextRequest) {
             }
           }
 
-            if (!reminderType) continue;
+          if (!reminderType) continue;
 
-            // Strict Idempotency Check
+          // Strict Idempotency Check
+          if (localNotificationLogs.has(idempotencyKey)) {
+            summary.skippedDuplicate++;
+            continue;
+          }
+
+          if (supabase) {
             const { data: existingLog } = await supabase
               .from('notification_logs')
               .select('id')
@@ -250,11 +301,14 @@ async function handleCronJob(req: NextRequest) {
               summary.skippedDuplicate++;
               continue;
             }
+          }
+          localNotificationLogs.add(idempotencyKey);
 
-            // Quiet hours suppression
-            if (inQuiet) {
-              summary.suppressedQuietHours++;
-              await supabase.from('notification_logs').insert({
+          // Quiet hours suppression
+          if (inQuiet) {
+            summary.suppressedQuietHours++;
+            if (supabase) {
+              supabase.from('notification_logs').insert({
                 user_id: settings.user_id,
                 session_id: session.id,
                 notification_type: reminderType,
@@ -263,58 +317,93 @@ async function handleCronJob(req: NextRequest) {
                 title,
                 body,
                 delivery_status: 'suppressed_quiet_hours',
-              });
-              continue;
+              }).then();
             }
+            continue;
+          }
 
-            // Dispatch push notification
-            const payload = JSON.stringify({
-              title,
-              body,
+          // Dispatch push notification
+          const payload = JSON.stringify({
+            title,
+            body,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/badge-72x72.png',
+            url: '/schedule',
+            type: reminderType,
+            scheduleId: session.id,
+            tag: `session-${session.id}`,
+          });
+
+          for (const sub of subscriptions) {
+            try {
+              await webpush.sendNotification(
+                {
+                  endpoint: sub.endpoint,
+                  keys: { p256dh: sub.p256dh, auth: sub.auth },
+                },
+                payload,
+                { TTL: 300, urgency: 'high' }
+              );
+              summary.remindersSent++;
+              if (supabase && sub.id) {
+                supabase
+                  .from('push_subscriptions')
+                  .update({ last_used_at: new Date().toISOString() })
+                  .eq('id', sub.id)
+                  .then();
+              }
+            } catch (err: any) {
+              if (err.statusCode === 410 || err.statusCode === 404) {
+                summary.expiredSubscriptionsRemoved++;
+                if (supabase && sub.id) {
+                  supabase.from('push_subscriptions').delete().eq('id', sub.id).then();
+                }
+              }
+            }
+          }
+
+            if (supabase) {
+              supabase.from('notification_logs').insert({
+                user_id: settings.user_id,
+                session_id: session.id,
+                notification_type: reminderType,
+                scheduled_for: local.dateStr,
+                idempotency_key: idempotencyKey,
+                title,
+                body,
+                delivery_status: 'sent',
+              }).then();
+            }
+          }
+
+          // If simulation was explicitly requested and no reminder was due this minute, simulate the first session's advance alert
+          if (isSimulation && summary.remindersSent === 0 && sessions.length > 0 && subscriptions.length > 0) {
+            const simSession = sessions[0];
+            const simTitle = `🎯 ${simSession.title} Starts Soon`;
+            const simBody = `Your ${simSession.title} session starts in ${settings.reminder_before_minutes || 10} minutes. Get ready!`;
+            const simPayload = JSON.stringify({
+              title: simTitle,
+              body: simBody,
               icon: '/icons/icon-192x192.png',
               badge: '/icons/badge-72x72.png',
               url: '/schedule',
-              type: reminderType,
-              scheduleId: session.id,
-              tag: `session-${session.id}`,
+              type: 'before_session',
+              scheduleId: simSession.id,
+              tag: `sim-${simSession.id}-${Date.now()}`,
             });
 
             for (const sub of subscriptions) {
               try {
                 await webpush.sendNotification(
-                  {
-                    endpoint: sub.endpoint,
-                    keys: { p256dh: sub.p256dh, auth: sub.auth },
-                  },
-                  payload,
+                  { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                  simPayload,
                   { TTL: 300, urgency: 'high' }
                 );
                 summary.remindersSent++;
-                await supabase
-                  .from('push_subscriptions')
-                  .update({ last_used_at: new Date().toISOString() })
-                  .eq('id', sub.id);
-              } catch (err: any) {
-                if (err.statusCode === 410 || err.statusCode === 404) {
-                  summary.expiredSubscriptionsRemoved++;
-                  await supabase.from('push_subscriptions').delete().eq('id', sub.id);
-                }
-              }
+              } catch (err) {}
             }
-
-            await supabase.from('notification_logs').insert({
-              user_id: settings.user_id,
-              session_id: session.id,
-              notification_type: reminderType,
-              scheduled_for: local.dateStr,
-              idempotency_key: idempotencyKey,
-              title,
-              body,
-              delivery_status: 'sent',
-            });
           }
         }
-      }
 
     // Also dispatch to local mock cache if any local test subscriptions exist
     if (localSubscriptionsCache.size > 0 && summary.remindersSent === 0) {

@@ -68,6 +68,45 @@ export interface StoredLocalAccount {
   settings?: UserNotificationSettings;
 }
 
+export function syncSessionsToServer(
+  sessionsList: StudySession[],
+  settingsData?: UserNotificationSettings,
+  userId?: string
+) {
+  if (typeof window === 'undefined') return;
+  try {
+    const rawUser = localStorage.getItem('skilltrack_user');
+    const u = rawUser ? JSON.parse(rawUser) : null;
+    const finalUserId = userId || u?.id || localStorage.getItem('skilltrack_anon_id') || generateUUID();
+    if (!localStorage.getItem('skilltrack_anon_id')) {
+      localStorage.setItem('skilltrack_anon_id', finalUserId);
+    }
+
+    const rawSettings = localStorage.getItem('skilltrack_settings');
+    const finalSettings = settingsData || (rawSettings ? JSON.parse(rawSettings) : DEFAULT_SETTINGS);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.pushManager.getSubscription().then((sub) => {
+          fetch('/api/sessions/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: finalUserId,
+              sessions: sessionsList,
+              settings: finalSettings,
+              subscription: sub ? sub.toJSON() : null,
+              deviceName: navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
+            }),
+          }).catch(() => {});
+        });
+      });
+    }
+  } catch (e) {
+    // Ignore network or parsing errors during background sync
+  }
+}
+
 export function useSkillTrackStore() {
   // Strictly null until user creates an account or signs in
   const [user, setUser] = useState<{ id: string; email: string | null } | null>(null);
@@ -90,29 +129,25 @@ export function useSkillTrackStore() {
       const storedUser = localStorage.getItem('skilltrack_user');
       const storedProfile = localStorage.getItem('skilltrack_profile');
 
+      const storedSessions = localStorage.getItem('skilltrack_sessions');
+      const storedProblems = localStorage.getItem('skilltrack_dsa');
+      const storedLogs = localStorage.getItem('skilltrack_logs');
+      const storedSettings = localStorage.getItem('skilltrack_settings');
+
+      if (storedSessions) setSessions(JSON.parse(storedSessions));
+      if (storedProblems) setDsaProblems(JSON.parse(storedProblems));
+      if (storedLogs) setSessionLogs(JSON.parse(storedLogs));
+      if (storedSettings) setSettings(JSON.parse(storedSettings));
+
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         if (storedProfile) {
           setProfile(JSON.parse(storedProfile));
         }
-
-        const storedSessions = localStorage.getItem('skilltrack_sessions');
-        const storedProblems = localStorage.getItem('skilltrack_dsa');
-        const storedLogs = localStorage.getItem('skilltrack_logs');
-        const storedSettings = localStorage.getItem('skilltrack_settings');
-
-        setSessions(storedSessions ? JSON.parse(storedSessions) : []);
-        setDsaProblems(storedProblems ? JSON.parse(storedProblems) : []);
-        setSessionLogs(storedLogs ? JSON.parse(storedLogs) : []);
-        if (storedSettings) setSettings(JSON.parse(storedSettings));
       } else {
-        // No account logged in - keep completely empty
         setUser(null);
         setProfile(null);
-        setSessions([]);
-        setDsaProblems([]);
-        setSessionLogs([]);
       }
     } catch (e) {
       console.warn('Could not read user state from storage:', e);
@@ -526,7 +561,11 @@ export function useSkillTrackStore() {
         is_active: newSession.is_active ?? true,
       };
 
-      setSessions((prev) => [...prev, session]);
+      setSessions((prev) => {
+        const next = [...prev, session];
+        syncSessionsToServer(next, settings, user?.id);
+        return next;
+      });
 
       if (supabase && user && isSupabaseClientConfigured) {
         const dbPayload = {
@@ -558,9 +597,11 @@ export function useSkillTrackStore() {
 
   const updateSession = useCallback(
     (id: string, updates: Partial<StudySession>) => {
-      setSessions((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
-      );
+      setSessions((prev) => {
+        const next = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
+        syncSessionsToServer(next, settings, user?.id);
+        return next;
+      });
       if (supabase && user && isSupabaseClientConfigured) {
         const { id: _, user_id: __, is_today: ___, status_today: ____, ...cleanUpdates } = updates as any;
         supabase
@@ -572,12 +613,16 @@ export function useSkillTrackStore() {
           });
       }
     },
-    [user]
+    [user, settings]
   );
 
   const deleteSession = useCallback(
     (id: string) => {
-      setSessions((prev) => prev.filter((s) => s.id !== id));
+      setSessions((prev) => {
+        const next = prev.filter((s) => s.id !== id);
+        syncSessionsToServer(next, settings, user?.id);
+        return next;
+      });
       if (supabase && user && isSupabaseClientConfigured) {
         supabase
           .from('study_sessions')
@@ -588,7 +633,7 @@ export function useSkillTrackStore() {
           });
       }
     },
-    [user]
+    [user, settings]
   );
 
   const toggleSessionCompletion = useCallback(
@@ -708,6 +753,7 @@ export function useSkillTrackStore() {
     (newSettings: Partial<UserNotificationSettings>) => {
       setSettings((prev) => {
         const merged = { ...prev, ...newSettings };
+        syncSessionsToServer(sessions, merged, user?.id);
         if (supabase && user && isSupabaseClientConfigured) {
           supabase
             .from('user_notification_settings')
@@ -719,7 +765,7 @@ export function useSkillTrackStore() {
         return merged;
       });
     },
-    [user]
+    [user, sessions]
   );
 
   const refreshDevices = useCallback(async () => {

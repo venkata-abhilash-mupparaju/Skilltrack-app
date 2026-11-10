@@ -128,6 +128,34 @@ export function NotificationSettingsView({
     setStatusMessage(null);
 
     try {
+      // 1. Immediately sync fresh sessions and subscription to cloud reminder engine
+      try {
+        let allSessions: any[] = [];
+        const rawSessions = localStorage.getItem('skilltrack_sessions');
+        if (rawSessions) allSessions = JSON.parse(rawSessions);
+
+        let activeSub: any = null;
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) activeSub = sub.toJSON();
+        }
+
+        await fetch('/api/sessions/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user?.id || localStorage.getItem('skilltrack_anon_id') || 'guest-user',
+            sessions: allSessions,
+            settings,
+            subscription: activeSub,
+          }),
+        });
+      } catch (syncErr) {
+        console.warn('[Sync before simulate warning]:', syncErr);
+      }
+
+      // 2. Trigger the cloud reminder engine
       const res = await fetch('/api/cron/reminders?simulate=true', {
         method: 'POST',
         headers: {
