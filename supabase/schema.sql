@@ -4,7 +4,6 @@
 
 -- 1. Enable Required Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_cron";
 CREATE EXTENSION IF NOT EXISTS "pg_net";
 
 -- 2. Profiles Table (Synced with auth.users)
@@ -124,47 +123,95 @@ ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_logs ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Study Sessions Policies
+DROP POLICY IF EXISTS "Users can view own study sessions" ON public.study_sessions;
 CREATE POLICY "Users can view own study sessions" ON public.study_sessions FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own study sessions" ON public.study_sessions;
 CREATE POLICY "Users can insert own study sessions" ON public.study_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own study sessions" ON public.study_sessions;
 CREATE POLICY "Users can update own study sessions" ON public.study_sessions FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own study sessions" ON public.study_sessions;
 CREATE POLICY "Users can delete own study sessions" ON public.study_sessions FOR DELETE USING (auth.uid() = user_id);
 
 -- Session Logs Policies
+DROP POLICY IF EXISTS "Users can view own session logs" ON public.session_logs;
 CREATE POLICY "Users can view own session logs" ON public.session_logs FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own session logs" ON public.session_logs;
 CREATE POLICY "Users can insert own session logs" ON public.session_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own session logs" ON public.session_logs;
 CREATE POLICY "Users can update own session logs" ON public.session_logs FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own session logs" ON public.session_logs;
 CREATE POLICY "Users can delete own session logs" ON public.session_logs FOR DELETE USING (auth.uid() = user_id);
 
 -- DSA Problems Policies
+DROP POLICY IF EXISTS "Users can view own DSA problems" ON public.dsa_problems;
 CREATE POLICY "Users can view own DSA problems" ON public.dsa_problems FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own DSA problems" ON public.dsa_problems;
 CREATE POLICY "Users can insert own DSA problems" ON public.dsa_problems FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own DSA problems" ON public.dsa_problems;
 CREATE POLICY "Users can update own DSA problems" ON public.dsa_problems FOR UPDATE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own DSA problems" ON public.dsa_problems;
 CREATE POLICY "Users can delete own DSA problems" ON public.dsa_problems FOR DELETE USING (auth.uid() = user_id);
 
 -- Notification Settings Policies
+DROP POLICY IF EXISTS "Users can view own settings" ON public.user_notification_settings;
 CREATE POLICY "Users can view own settings" ON public.user_notification_settings FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert/update own settings" ON public.user_notification_settings;
 CREATE POLICY "Users can insert/update own settings" ON public.user_notification_settings FOR ALL USING (auth.uid() = user_id);
 
 -- Push Subscriptions Policies
+DROP POLICY IF EXISTS "Users can view own subscriptions" ON public.push_subscriptions;
 CREATE POLICY "Users can view own subscriptions" ON public.push_subscriptions FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own subscriptions" ON public.push_subscriptions;
 CREATE POLICY "Users can insert own subscriptions" ON public.push_subscriptions FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own subscriptions" ON public.push_subscriptions;
 CREATE POLICY "Users can delete own subscriptions" ON public.push_subscriptions FOR DELETE USING (auth.uid() = user_id);
 
 -- Notification Logs Policies
+DROP POLICY IF EXISTS "Users can view own notification logs" ON public.notification_logs;
 CREATE POLICY "Users can view own notification logs" ON public.notification_logs FOR SELECT USING (auth.uid() = user_id);
 
--- Service Role Bypass (For Edge Function and Cloud Scheduler)
+-- Service Role Policies (Full access for server routes and edge functions)
+DROP POLICY IF EXISTS "Service role full access on profiles" ON public.profiles;
 CREATE POLICY "Service role full access on profiles" ON public.profiles FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "Service role full access on study_sessions" ON public.study_sessions;
 CREATE POLICY "Service role full access on study_sessions" ON public.study_sessions FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "Service role full access on session_logs" ON public.session_logs;
 CREATE POLICY "Service role full access on session_logs" ON public.session_logs FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "Service role full access on dsa_problems" ON public.dsa_problems;
 CREATE POLICY "Service role full access on dsa_problems" ON public.dsa_problems FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "Service role full access on user_notification_settings" ON public.user_notification_settings;
 CREATE POLICY "Service role full access on user_notification_settings" ON public.user_notification_settings FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "Service role full access on push_subscriptions" ON public.push_subscriptions;
 CREATE POLICY "Service role full access on push_subscriptions" ON public.push_subscriptions FOR ALL TO service_role USING (true);
+
+DROP POLICY IF EXISTS "Service role full access on notification_logs" ON public.notification_logs;
 CREATE POLICY "Service role full access on notification_logs" ON public.notification_logs FOR ALL TO service_role USING (true);
 
 -- Auto-create profile & notification settings on auth signup
@@ -198,9 +245,6 @@ CREATE TRIGGER on_auth_user_created
 -- ==============================================================================
 -- Cloud Reminder Scheduler: pg_cron + pg_net trigger
 -- ==============================================================================
--- This SQL function calls the Supabase Edge Function or Vercel API every minute.
--- Replace YOUR_PROJECT_REF and YOUR_ANON_KEY or SERVICE_ROLE_KEY accordingly.
-
 CREATE OR REPLACE FUNCTION public.trigger_reminder_cron()
 RETURNS void AS $$
 DECLARE
@@ -218,6 +262,3 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- To schedule every minute via pg_cron:
--- SELECT cron.schedule('check-study-reminders-job', '* * * * *', 'SELECT public.trigger_reminder_cron()');
