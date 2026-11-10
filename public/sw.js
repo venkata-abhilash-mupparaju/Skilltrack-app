@@ -1,5 +1,5 @@
 // SkillTrack Service Worker with Web Push & Offline Support
-const CACHE_NAME = 'skilltrack-cache-v1';
+const CACHE_NAME = 'skilltrack-cache-v2';
 const OFFLINE_URL = '/offline.html';
 
 const ASSETS_TO_CACHE = [
@@ -13,8 +13,9 @@ const ASSETS_TO_CACHE = [
   '/icons/icon.svg',
 ];
 
-// Install Event - Pre-cache core shell & offline page
+// Install Event - Pre-cache core shell & activate immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       for (const asset of ASSETS_TO_CACHE) {
@@ -24,11 +25,11 @@ self.addEventListener('install', (event) => {
           console.warn('[SW] Could not pre-cache asset:', asset, err);
         }
       }
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate Event - Claim clients and remove stale caches
+// Activate Event - Claim clients immediately and purge stale caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -44,37 +45,60 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Network first with offline fallback for navigation
+// Fetch Event - Network first for HTML and Next.js assets to ensure live updates
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Ignore API requests and chrome extension requests
+  // Ignore API requests and browser extension requests
   if (url.pathname.startsWith('/api/') || url.protocol.startsWith('chrome-extension')) {
     return;
   }
 
-  // Handle HTML navigation requests
+  // 1. Navigation requests (HTML pages): Network first, offline fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedFallback = await cache.match(OFFLINE_URL);
-        return cachedFallback || new Response('You are offline.', {
-          status: 503,
-          headers: { 'Content-Type': 'text/plain' },
-        });
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const cached = (await cache.match(event.request)) || (await cache.match(OFFLINE_URL));
+          return cached || new Response('You are offline.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain' },
+          });
+        })
     );
     return;
   }
 
-  // Handle static assets with Stale-While-Revalidate or Network First
+  // 2. Next.js chunks & JS assets: Network first, cache fallback
+  if (url.pathname.startsWith('/_next/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // 3. Static images and icons: Stale-While-Revalidate
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch in background to update cache
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
@@ -86,7 +110,6 @@ self.addEventListener('fetch', (event) => {
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
         }
-        // Cache static images/icons
         if (url.pathname.startsWith('/icons/') || url.pathname.endsWith('.png') || url.pathname.endsWith('.svg')) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));

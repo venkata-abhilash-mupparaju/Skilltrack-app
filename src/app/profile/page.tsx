@@ -19,6 +19,7 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
+  RotateCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { SessionCategory } from '@/types';
@@ -115,6 +116,20 @@ export default function ProfilePage() {
   const handleSignOut = async () => {
     await signOut();
     router.push('/login');
+  };
+
+  const handleClearCacheAndReload = async () => {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch {}
+    window.location.reload();
   };
 
   // If unauthenticated, show a clean, welcoming login / sign-up screen
@@ -222,6 +237,15 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleClearCacheAndReload}
+              className="px-3 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 border border-surface-700 text-surface-200 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+              title="Force Update App & Fetch Latest Version"
+              aria-label="Force Update App"
+            >
+              <RotateCw className="w-3.5 h-3.5 text-primary-400" />
+              <span className="hidden sm:inline">Update App</span>
+            </button>
             <button
               onClick={() => setIsEditingProfile(!isEditingProfile)}
               className="px-3.5 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 border border-surface-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"

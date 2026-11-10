@@ -6,6 +6,15 @@ export function ServiceWorkerRegister() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        console.log('[SkillTrack SW] Controller changed. Reloading page with latest build.');
+        window.location.reload();
+      }
+    });
+
     const registerSW = () => {
       navigator.serviceWorker
         .register('/sw.js', { scope: '/' })
@@ -18,8 +27,10 @@ export function ServiceWorkerRegister() {
             const installingWorker = registration.installing;
             if (installingWorker) {
               installingWorker.onstatechange = () => {
-                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log('[SkillTrack SW] New content is available.');
+                if (installingWorker.state === 'installed') {
+                  if (navigator.serviceWorker.controller) {
+                    console.log('[SkillTrack SW] New content is available and activated.');
+                  }
                 }
               };
             }
