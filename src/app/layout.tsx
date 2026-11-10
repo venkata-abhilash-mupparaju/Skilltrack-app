@@ -45,12 +45,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" translate="no">
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="google" content="notranslate" />
+        <meta httpEquiv="Content-Language" content="en" />
       </head>
       <body className="bg-surface-950 text-surface-50 min-h-screen flex flex-col font-sans antialiased selection:bg-primary-500 selection:text-white pb-20 md:pb-6">
         <ServiceWorkerRegister />

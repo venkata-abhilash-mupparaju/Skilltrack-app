@@ -111,6 +111,11 @@ const DEFAULT_SETTINGS: UserNotificationSettings = {
 };
 
 export function useSkillTrackStore() {
+  const [user, setUser] = useState<{ id: string; email: string | null; isGuest: boolean } | null>({
+    id: 'guest-user',
+    email: 'guest@skilltrack.app',
+    isGuest: true,
+  });
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [dsaProblems, setDsaProblems] = useState<DsaProblem[]>([]);
   const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
@@ -123,6 +128,10 @@ export function useSkillTrackStore() {
   // Load initial data from localStorage & Supabase
   useEffect(() => {
     try {
+      const storedUser = localStorage.getItem('skilltrack_user');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
       const storedSessions = localStorage.getItem('skilltrack_sessions');
       const storedProblems = localStorage.getItem('skilltrack_dsa');
       const storedLogs = localStorage.getItem('skilltrack_logs');
@@ -323,7 +332,59 @@ export function useSkillTrackStore() {
 
   const totalDsaSolved = dsaProblems.filter((p) => p.status === 'Solved').length;
 
+  const signInWithEmail = useCallback(async (email: string, pass: string) => {
+    if (isSupabaseClientConfigured && supabase) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) throw error;
+      if (data.user) {
+        const authedUser = { id: data.user.id, email: data.user.email ?? email, isGuest: false };
+        setUser(authedUser);
+        localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
+        return authedUser;
+      }
+    }
+    // Local fallback login
+    const localUser = { id: `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`, email, isGuest: false };
+    setUser(localUser);
+    localStorage.setItem('skilltrack_user', JSON.stringify(localUser));
+    return localUser;
+  }, []);
+
+  const signUpWithEmail = useCallback(async (email: string, pass: string) => {
+    if (isSupabaseClientConfigured && supabase) {
+      const { data, error } = await supabase.auth.signUp({ email, password: pass });
+      if (error) throw error;
+      if (data.user) {
+        const authedUser = { id: data.user.id, email: data.user.email ?? email, isGuest: false };
+        setUser(authedUser);
+        localStorage.setItem('skilltrack_user', JSON.stringify(authedUser));
+        return authedUser;
+      }
+    }
+    const localUser = { id: `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`, email, isGuest: false };
+    setUser(localUser);
+    localStorage.setItem('skilltrack_user', JSON.stringify(localUser));
+    return localUser;
+  }, []);
+
+  const signInAsGuest = useCallback(() => {
+    const guestUser = { id: 'guest-user', email: 'guest@skilltrack.app', isGuest: true };
+    setUser(guestUser);
+    localStorage.setItem('skilltrack_user', JSON.stringify(guestUser));
+    return guestUser;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    if (isSupabaseClientConfigured && supabase) {
+      await supabase.auth.signOut().catch(() => {});
+    }
+    const guestUser = { id: 'guest-user', email: 'guest@skilltrack.app', isGuest: true };
+    setUser(guestUser);
+    localStorage.removeItem('skilltrack_user');
+  }, []);
+
   return {
+    user,
     sessions,
     dsaProblems,
     sessionLogs,
@@ -344,5 +405,9 @@ export function useSkillTrackStore() {
     updateSettings,
     refreshDevices,
     removeDevice,
+    signInWithEmail,
+    signUpWithEmail,
+    signInAsGuest,
+    signOut,
   };
 }

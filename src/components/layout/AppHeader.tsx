@@ -130,6 +130,20 @@ export function AppHeader({ currentStreak = 5, syncStatus = 'synced' }: AppHeade
             </button>
           )}
 
+          {/* English Language Pill */}
+          <div className="hidden xs:flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-900 border border-surface-700 text-[10px] text-surface-200" title="Application is locked in English">
+            <span>🇺🇸</span>
+            <span className="font-semibold text-white">EN</span>
+          </div>
+
+          {/* User Sign In / Account Link */}
+          <Link
+            href="/login"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-800 hover:bg-surface-700 border border-surface-700 text-xs font-semibold text-white transition-colors"
+          >
+            <span>Log In</span>
+          </Link>
+
           {/* Notification Quick Link */}
           <Link
             href="/settings/notifications"
