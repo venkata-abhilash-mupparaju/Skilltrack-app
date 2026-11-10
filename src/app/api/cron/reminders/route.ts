@@ -118,83 +118,121 @@ async function handleCronJob(req: NextRequest) {
   try {
     // If Supabase is configured, use database
     if (supabase) {
-      const { data: settingsList } = await supabase
+      // 1. Fetch all users who have active push subscriptions
+      const { data: subsList } = await supabase
+        .from('push_subscriptions')
+        .select('*');
+
+      // 2. Fetch user notification settings
+      const { data: allSettings } = await supabase
         .from('user_notification_settings')
-        .select('*')
-        .eq('enabled', true);
+        .select('*');
 
-      if (settingsList && settingsList.length > 0) {
-        for (const settings of settingsList) {
-          summary.processedUsers++;
-          const userTz = settings.timezone || 'Asia/Kolkata';
-          const local = getUserLocalTime(now, userTz);
+      const settingsMap = new Map<string, any>();
+      (allSettings || []).forEach((s) => settingsMap.set(s.user_id, s));
 
-          const inQuiet = settings.quiet_hours_enabled
-            ? isInQuietHours(local.totalMinutes, settings.quiet_hours_start, settings.quiet_hours_end)
-            : false;
+      // Group subscriptions by user_id
+      const userSubsMap = new Map<string, any[]>();
+      (subsList || []).forEach((sub) => {
+        if (!sub.user_id) return;
+        const current = userSubsMap.get(sub.user_id) || [];
+        current.push(sub);
+        userSubsMap.set(sub.user_id, current);
+      });
 
-          const { data: sessions } = await supabase
-            .from('study_sessions')
-            .select('*')
-            .eq('user_id', settings.user_id)
-            .eq('is_active', true)
-            .contains('days_of_week', [local.dayOfWeek]);
+      // Target users: all users with enrolled devices or enabled settings
+      const targetUserIds = new Set<string>();
+      (allSettings || []).filter((s) => s.enabled).forEach((s) => targetUserIds.add(s.user_id));
+      Array.from(userSubsMap.keys()).forEach((uid) => targetUserIds.add(uid));
 
-          if (!sessions || sessions.length === 0) continue;
+      for (const userId of targetUserIds) {
+        summary.processedUsers++;
+        const settings = settingsMap.get(userId) || {
+          user_id: userId,
+          enabled: true,
+          timezone: 'Asia/Kolkata',
+          reminder_before_minutes: 10,
+          reminder_at_start: true,
+          reminder_missed: true,
+          missed_threshold_minutes: 30,
+          daily_summary: true,
+          quiet_hours_enabled: false,
+          quiet_hours_start: '22:00',
+          quiet_hours_end: '07:00',
+        };
 
-          const { data: subscriptions } = await supabase
-            .from('push_subscriptions')
-            .select('*')
-            .eq('user_id', settings.user_id);
+        const userTz = settings.timezone || 'Asia/Kolkata';
+        const local = getUserLocalTime(now, userTz);
 
-          if (!subscriptions || subscriptions.length === 0) continue;
+        const inQuiet = settings.quiet_hours_enabled
+          ? isInQuietHours(local.totalMinutes, settings.quiet_hours_start, settings.quiet_hours_end)
+          : false;
 
-          for (const session of sessions) {
-            const startMinutes = parseTimeToMinutes(session.start_time);
-            const endMinutes = parseTimeToMinutes(session.end_time);
-            const beforeOffset = settings.reminder_before_minutes || 10;
-            const targetBeforeMinutes = startMinutes - beforeOffset;
+        const { data: rawSessions } = await supabase
+          .from('study_sessions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_active', true);
 
-            let reminderType: string | null = null;
-            let title = '';
-            let body = '';
-            let idempotencyKey = '';
+        // Filter sessions active for today in JavaScript
+        const sessions = (rawSessions || []).filter((s) => {
+          const days = Array.isArray(s.days_of_week) && s.days_of_week.length > 0
+            ? s.days_of_week
+            : [0, 1, 2, 3, 4, 5, 6];
+          return days.includes(local.dayOfWeek);
+        });
 
-            // Before session reminder
-            if (Math.abs(local.totalMinutes - targetBeforeMinutes) <= 1) {
-              reminderType = 'before_session';
-              title = `🎯 ${session.title} Starts Soon`;
-              body = `Your ${session.title} session starts in ${beforeOffset} minutes. Get ready!`;
-              idempotencyKey = `${session.id}_${local.dateStr}_before_${beforeOffset}`;
+        if (sessions.length === 0) continue;
+
+        const subscriptions = userSubsMap.get(userId) || [];
+        if (subscriptions.length === 0) continue;
+
+        for (const session of sessions) {
+          const startMinutes = parseTimeToMinutes(session.start_time);
+          const endMinutes = parseTimeToMinutes(session.end_time);
+          const beforeOffset = settings.reminder_before_minutes || 10;
+          const minutesUntilStart = startMinutes - local.totalMinutes;
+
+          let reminderType: string | null = null;
+          let title = '';
+          let body = '';
+          let idempotencyKey = '';
+
+          // 1. Advance Reminder (Prior to Session): session starts soon and hasn't started yet
+          if (minutesUntilStart > 0 && minutesUntilStart <= beforeOffset) {
+            reminderType = 'before_session';
+            title = `🎯 ${session.title} Starts Soon`;
+            body = `Your ${session.title} session starts in ${minutesUntilStart === beforeOffset ? beforeOffset : minutesUntilStart} minutes. Get ready!`;
+            idempotencyKey = `${session.id}_${local.dateStr}_before_${beforeOffset}`;
+          }
+          // 2. At start reminder: within the first 15 minutes of session start
+          else if (settings.reminder_at_start && local.totalMinutes >= startMinutes && local.totalMinutes < startMinutes + 15) {
+            reminderType = 'session_start';
+            title = `⚡ Study Time: ${session.title}`;
+            body = `It's time for ${session.title}! Solve your daily problems now.`;
+            idempotencyKey = `${session.id}_${local.dateStr}_start`;
+          }
+          // 3. Missed session reminder: after session ends + threshold
+          else if (
+            settings.reminder_missed &&
+            local.totalMinutes >= endMinutes + (settings.missed_threshold_minutes || 30) &&
+            local.totalMinutes <= endMinutes + (settings.missed_threshold_minutes || 30) + 15
+          ) {
+            const { data: log } = await supabase
+              .from('session_logs')
+              .select('id, status')
+              .eq('user_id', settings.user_id)
+              .eq('session_id', session.id)
+              .eq('date', local.dateStr)
+              .single();
+
+            if (!log || log.status !== 'completed') {
+              reminderType = 'missed_session';
+              title = `⚠️ Incomplete Session: ${session.title}`;
+              body = `You haven't checked off your ${session.title} session today yet. Keep your streak alive!`;
+              idempotencyKey = `${session.id}_${local.dateStr}_missed`;
             }
-            // At start reminder
-            else if (settings.reminder_at_start && Math.abs(local.totalMinutes - startMinutes) <= 1) {
-              reminderType = 'session_start';
-              title = `⚡ Study Time: ${session.title}`;
-              body = `It's time for ${session.title}! Solve your daily problems now.`;
-              idempotencyKey = `${session.id}_${local.dateStr}_start`;
-            }
-            // Missed session reminder
-            else if (
-              settings.reminder_missed &&
-              local.totalMinutes >= endMinutes + (settings.missed_threshold_minutes || 30) &&
-              local.totalMinutes <= endMinutes + (settings.missed_threshold_minutes || 30) + 15
-            ) {
-              const { data: log } = await supabase
-                .from('session_logs')
-                .select('id, status')
-                .eq('user_id', settings.user_id)
-                .eq('session_id', session.id)
-                .eq('date', local.dateStr)
-                .single();
-
-              if (!log || log.status !== 'completed') {
-                reminderType = 'missed_session';
-                title = `⚠️ Incomplete Session: ${session.title}`;
-                body = `You haven't checked off your ${session.title} session today yet. Keep your streak alive!`;
-                idempotencyKey = `${session.id}_${local.dateStr}_missed`;
-              }
-            }
+          }
 
             if (!reminderType) continue;
 
@@ -274,7 +312,6 @@ async function handleCronJob(req: NextRequest) {
           }
         }
       }
-    }
 
     // Also dispatch to local mock cache if any local test subscriptions exist
     if (localSubscriptionsCache.size > 0 && summary.remindersSent === 0) {

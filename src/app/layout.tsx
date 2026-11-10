@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ServiceWorkerRegister } from '@/components/pwa/ServiceWorkerRegister';
 import { InstallPromptBanner } from '@/components/pwa/InstallPromptBanner';
+import { SessionAlarmEngine } from '@/components/pwa/SessionAlarmEngine';
 import { MobileNavBar } from '@/components/layout/MobileNavBar';
 
 export const metadata: Metadata = {
@@ -56,6 +57,7 @@ export default function RootLayout({
       <body className="bg-surface-950 text-surface-50 min-h-screen flex flex-col font-sans antialiased selection:bg-primary-500 selection:text-white pb-20 md:pb-6">
         <ServiceWorkerRegister />
         <InstallPromptBanner />
+        <SessionAlarmEngine />
         <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
           {children}
         </main>

@@ -50,19 +50,19 @@ function simulateScheduler(simulatedUtcDate, session, settings, existingLogs) {
   const startMin = parseTimeToMinutes(session.start_time);
   const endMin = parseTimeToMinutes(session.end_time);
   const offset = settings.reminder_before_minutes || 10;
-  const targetBefore = startMin - offset;
+  const minutesUntilStart = startMin - local.totalMinutes;
 
   let reminderType = null;
   let title = '';
   let body = '';
   let idempotencyKey = '';
 
-  if (Math.abs(local.totalMinutes - targetBefore) <= 1) {
+  if (minutesUntilStart > 0 && minutesUntilStart <= offset) {
     reminderType = 'before_session';
     title = `🎯 ${session.title} Starts Soon`;
-    body = `Your ${session.title} session starts in ${offset} minutes. Get ready!`;
+    body = `Your ${session.title} session starts in ${minutesUntilStart === offset ? offset : minutesUntilStart} minutes. Get ready!`;
     idempotencyKey = `${session.id}_${local.dateStr}_before_${offset}`;
-  } else if (settings.reminder_at_start && Math.abs(local.totalMinutes - startMin) <= 1) {
+  } else if (settings.reminder_at_start && local.totalMinutes >= startMin && local.totalMinutes < startMin + 15) {
     reminderType = 'session_start';
     title = `⚡ Study Time: ${session.title}`;
     body = `It's time for ${session.title}! Solve your daily problems now.`;
